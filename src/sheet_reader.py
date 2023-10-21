@@ -15,12 +15,12 @@ class SheetReader:
         self._csv_file = filename
 
     def read(self):
+        game_table = {}
         with open(self._csv_file, newline='') as csvfile:
             self._logger.info(f"Reading CSV file: {self._csv_file} ...")
             reader = csv.reader(csvfile, delimiter=',') #, quotechar='|'
             is_new_court = False
             in_pause = False
-            pause = None
             game_tags = []
             nb_of_games = 0
             for row in reader:
@@ -32,22 +32,41 @@ class SheetReader:
                     is_new_court = True
                     self._logger.info(f"New court: {court_name}")
                 elif row[0] == "Pause":
-                    in_pause = True
-                    self._logger.info(f"Reading pause section ...")
-                    if pause is not None:
+                    if in_pause:
                         self._logger.error(f"Too many Pause section in file!")
-                    pauses = {}
+                    else:
+                        in_pause = True
+                        self._logger.info(f"Reading pause section ...")
+                        game_table['Bench'] = {}
+                        for i, game in enumerate(game_tags):
+                            game_table['Bench'][game] = []
                 elif is_new_court:
                     if len(game_tags) == 0:
                         game_tags = row
                         nb_of_games = len(game_tags)
                     else:
-                        # Read player 1 of team 1
-                        pass
+                        game_table[court_name] = {}
+                        is_new_court = False
+                        for i, game in enumerate(game_tags):
+                            game_table[court_name][game] = {"Team1" : [row[i]], "Team2" : []}
+
                 elif in_pause:
-                        # Read player 1 of pause 1
-                        pass
-        
+                    for i, game in enumerate(game_tags):
+                        game_table['Bench'][game] += [row[i]]
+                
+                else:
+                    t1 = game_table[court_name][game]["Team1"]
+                    t2 = game_table[court_name][game]["Team2"]
+                    if len(game_table[court_name][game]["Team1"]) == 1:
+                        for i, game in enumerate(game_tags):
+                            p = row[i]
+                            t = game_table[court_name][game]["Team1"]
+                            game_table[court_name][game]["Team1"] += [row[i]]
+                    elif len(game_table[court_name][game]["Team2"]) < 2:
+                        for i, game in enumerate(game_tags):
+                            game_table[court_name][game]["Team2"] += [row[i]]
+
+        return game_table
 
 
     def extract_court_name(self, line):
