@@ -16,15 +16,15 @@ class SheetReader:
 
     def read(self):
         game_table = {}
-        with open(self._csv_file, newline='') as csvfile:
+        with open(self._csv_file, newline="") as csvfile:
             self._logger.info(f"Reading CSV file: {self._csv_file} ...")
-            reader = csv.reader(csvfile, delimiter=',') #, quotechar='|'
+            reader = csv.reader(csvfile, delimiter=",")  # , quotechar='|'
             is_new_court = False
             in_pause = False
             game_tags = []
             nb_of_games = 0
             for row in reader:
-                while len(row) and row[len(row)-1] == '':
+                while len(row) and row[len(row) - 1] == "":
                     row.pop()
                 self._logger.debug(f"Analyzing row: {' : '.join(row)}")
                 if row[0].startswith("Terrain"):
@@ -37,9 +37,9 @@ class SheetReader:
                     else:
                         in_pause = True
                         self._logger.info(f"Reading pause section ...")
-                        game_table['Bench'] = {}
+                        game_table["Bench"] = {}
                         for i, game in enumerate(game_tags):
-                            game_table['Bench'][game] = []
+                            game_table["Bench"][game] = []
                 elif is_new_court:
                     if len(game_tags) == 0:
                         game_tags = row
@@ -48,12 +48,15 @@ class SheetReader:
                         game_table[court_name] = {}
                         is_new_court = False
                         for i, game in enumerate(game_tags):
-                            game_table[court_name][game] = {"Team1" : [row[i]], "Team2" : []}
+                            game_table[court_name][game] = {
+                                "Team1": [row[i]],
+                                "Team2": [],
+                            }
 
                 elif in_pause:
                     for i, game in enumerate(game_tags):
-                        game_table['Bench'][game] += [row[i]]
-                
+                        game_table["Bench"][game] += [row[i]]
+
                 else:
                     t1 = game_table[court_name][game]["Team1"]
                     t2 = game_table[court_name][game]["Team2"]
@@ -68,7 +71,5 @@ class SheetReader:
 
         return game_table
 
-
     def extract_court_name(self, line):
         return line
-

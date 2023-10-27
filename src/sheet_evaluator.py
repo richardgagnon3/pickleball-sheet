@@ -1,6 +1,8 @@
 import argparse
 import logging
 
+from games_table import GamesTable
+from player import Player, PlayerStatistics
 from sheet_reader import SheetReader
 
 _logger = logging.getLogger(__name__)
@@ -21,13 +23,22 @@ _parser = argparse.ArgumentParser(
 )
 
 _parser.add_argument("csv_filename")  # Input file with games/courts
-_parser.add_argument("-l", "--level", choices=[10, 20, 30, 40, 50], type=int)  # log level
+_parser.add_argument("-l", "--level", choices=[10, 20, 30, 40, 50], type=int, default=20)  # log level
 args = _parser.parse_args()
 # TODO: Validate level value (or force a list of levels for argument -l)
 _logger.setLevel(args.level)
 _logger.debug(f"CSV File: {args.csv_filename}, log level: {args.level}")
 
-csv_directory = "pickleball-sheet/src"
+csv_directory = "." #"pickleball-sheet/src"
 csv_file = '/'.join([csv_directory , args.csv_filename])
 csv_reader = SheetReader(csv_file)
-csv_reader.read()
+game_table = GamesTable(csv_reader.read())
+game_table.print()
+
+players_list = game_table.get_players_list()
+players_stat = {}
+for p in players_list:
+    player = Player(p)
+    stats = PlayerStatistics(player)
+    stats.analyze_games(game_table)
+    players_stat[p] = stats
