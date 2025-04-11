@@ -1,16 +1,12 @@
 import csv
 import logging
 
+_logger = logging.getLogger("__main__")
 
 class SheetReader:
+    _logger = _logger
+    
     def __init__(self, filename: str) -> None:
-        self._logger = logging.getLogger(__class__.__name__)
-        self._logger.setLevel(logging.DEBUG)
-        # create console handler and set level to debug
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.DEBUG)
-        # add ch to logger
-        self._logger.addHandler(ch)
         self._logger.debug(f"New {self.__class__.__name__} object created")
         self._csv_file = filename
 
