@@ -6,8 +6,62 @@ class GamesTable:
         self._logger = logging.getLogger("__main__")
         self._logger.debug(f"New {self.__class__.__name__} object created")
         self._game_table = table
+        self._validate_table()
 
 
+    def _validate_table(self):
+        # Regroup table per games instead of per courts
+        # TODO Should we change that into reader instead?
+        games = {}
+        valid_games = True
+        for court in self._game_table:
+            for game in self._game_table[court]:
+                if game in games:
+                    if court in games[game]:
+                        self._logger.error(f"Game {game} is already in {court}")
+                        valid_games = False
+                        continue
+                    games[game][court] = self._game_table[court][game]                    
+                else:
+                    games[game] = {court: self._game_table[court][game]}
+        g1_players = self.get_players_list()
+        for game in games:
+            players = []
+            for court in games[game]:
+                if court == "Bench":
+                    players += games[game][court]
+                    continue
+                else:
+                    if len(games[game][court]['Team1']) != 2:
+                        self._logger.error(f"Bad number of players in Team 1 for Game {game} in {court}: {len(games[game][court]['Team1'])}")
+                        valid_games = False
+                    if len(games[game][court]['Team2']) != 2:
+                        self._logger.error(f"Bad number of players in Team 2 for Game {game} in {court}: {len(games[game][court]['Team1'])}")
+                        valid_games = False
+                    players += games[game][court]['Team1']
+                    players += games[game][court]['Team2']
+            # Remove possible duplicate players
+            unique_players = list(set(players))
+            if len(unique_players) != len(players):
+                self._logger.error(f"Duplicate players in Game {game}")
+                valid_games = False
+                continue
+            # Check if new player appear in the game
+            for player in players:
+                if player not in g1_players:
+                    self._logger.error(f"Player {player} is new in game {game} - must be in all games")
+                    valid_games = False
+            # Check if all players are in the game
+            for player in g1_players:
+                if player not in players:
+                    self._logger.error(f"Player {player} is missing in game {game} - must be in all games")
+                    valid_games = False
+                    
+        if not valid_games:
+            raise Exception("Something wrong in games table")
+                
+                
+                
     def get_players_list(self) -> list:
         """
         Return a list of all players in the game table.
