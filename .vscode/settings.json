@@ -2,6 +2,7 @@
     "python.analysis.extraPaths": [
         "${workspaceFolder}/src"
     ],
+    "python.testing.unittestEnabled": false,
 //   "python.testing.unittestArgs": [
 //        "-v",
 //        "-s",
@@ -10,8 +11,12 @@
 //        "test*.py"
 //    ],
     "python.testing.pytestEnabled": true,
-    "python.testing.unittestEnabled": false,
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "python.formatting.provider": "none",
     "python.testing.pytestArgs": [
         "."
-    ]
+    ],
+    "terminal.integrated.env.osx": {"PYTHONPATH": "${workspaceFolder}/src"}
 }

@@ -14,7 +14,9 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 # add ch to logger
 _logger.addHandler(ch)
-
+# Add log level into logged messages.
+formatter = logging.Formatter('%(levelname)s: %(message)s')
+ch.setFormatter(formatter)
 _logger.info('Starting the analysis program.')
 
 _parser = argparse.ArgumentParser(
@@ -36,15 +38,20 @@ if not os.path.isfile(csv_file):
     _logger.error(f"File {csv_file} does not exist!")
     exit(1)
 
-csv_reader = SheetReader(csv_file)
-game_table = GamesTable(csv_reader.read())
-if args.show:
-    game_table.print()
+try:
+    csv_reader = SheetReader(csv_file)
+    game_table = GamesTable(csv_reader.read())
+    if args.show:
+        game_table.print()
 
-players_list = game_table.get_players_list()
-players_stat = {}
-for p in players_list:
-    player = Player(p)
-    stats = PlayerStatistics(player)
-    stats.analyze_games(game_table)
-    players_stat[p] = stats
+    players_list = game_table.get_players_list()
+    players_stat = {}
+    for p in players_list:
+        player = Player(p)
+        stats = PlayerStatistics(player)
+        stats.analyze_games(game_table)
+        players_stat[p] = stats
+except Exception as e:
+    _logger.error(f"Exception raised: {e}")
+    exit(1)
+
