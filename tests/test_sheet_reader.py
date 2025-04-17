@@ -11,10 +11,13 @@ class TestSheetReader:
             reader.read()
 
     def test_read_csv_file(self):
-        reader = SheetReader('/'.join(["pickleball-sheet/games" , "11j-2t.csv"]))
+        reader = SheetReader('/'.join(["games" , "11j-2t.csv"]))
         game_table_raw = reader.read()
         #print(str(game_table_raw))
-        assert "Terrain 2" in game_table_raw
+        for game in game_table_raw:
+            assert "Terrain 1" in game
+            assert "Terrain 2" in game
+            assert "Bench" in game
 
     # TODO: Add test where csv file does not have 4 players per court.
     

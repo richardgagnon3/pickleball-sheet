@@ -10,76 +10,76 @@ class GamesTable:
 
 
     def _validate_table(self):
-        # Regroup table per games instead of per courts
-        # TODO Should we change that into reader instead?
-        games = {}
         valid_games = True
-        for court in self._game_table:
-            for game in self._game_table[court]:
-                if game in games:
-                    if court in games[game]:
-                        self._logger.error(f"Game {game} is already in {court}")
-                        valid_games = False
-                        continue
-                    games[game][court] = self._game_table[court][game]                    
-                else:
-                    games[game] = {court: self._game_table[court][game]}
         g1_players = self.get_players_list()
-        for game in games:
+        for game in self._game_table:
             players = []
-            for court in games[game]:
+            for court in game:
+                if court == "Game":
+                    continue
                 if court == "Bench":
-                    players += games[game][court]
+                    players += game[court]
                     continue
                 else:
-                    if len(games[game][court]['Team1']) != 2:
-                        self._logger.error(f"Bad number of players in Team 1 for Game {game} in {court}: {len(games[game][court]['Team1'])}")
+                    if len(game[court]['Team1']) != 2:
+                        self._logger.error(f"Bad number of players in Team 1 for Game {game['Game']} in {court}: {len(game[court]['Team1'])}")
                         valid_games = False
-                    if len(games[game][court]['Team2']) != 2:
-                        self._logger.error(f"Bad number of players in Team 2 for Game {game} in {court}: {len(games[game][court]['Team1'])}")
+                    if len(game[court]['Team2']) != 2:
+                        self._logger.error(f"Bad number of players in Team 2 for Game {game['Game']} in {court}: {len(game[court]['Team2'])}")
                         valid_games = False
-                    players += games[game][court]['Team1']
-                    players += games[game][court]['Team2']
+                    players += game[court]['Team1']
+                    players += game[court]['Team2']
             # Remove possible duplicate players
-            unique_players = list(set(players))
+            unique_players = set(players)
             if len(unique_players) != len(players):
-                self._logger.error(f"Duplicate players in Game {game}")
+                if len(g1_players) > len(unique_players):
+                    missing_players = set(g1_players) - unique_players
+                else:
+                    missing_players = unique_players - set(g1_players)
+                dup_players = []
+                while len(players):
+                    player = players.pop()
+                    if player in players:
+                        dup_players.append(player)
+                self._logger.error(f"Duplicate players {dup_players} in Game {game['Game']}, missing {missing_players}")
                 valid_games = False
                 continue
             # Check if new player appear in the game
             for player in players:
                 if player not in g1_players:
-                    self._logger.error(f"Player {player} is new in game {game} - must be in all games")
+                    self._logger.error(f"Player {player} is new in game {game['Game']} - must be in all games")
                     valid_games = False
             # Check if all players are in the game
             for player in g1_players:
                 if player not in players:
-                    self._logger.error(f"Player {player} is missing in game {game} - must be in all games")
+                    self._logger.error(f"Player {player} is missing in game {game['Game']} - must be in all games")
                     valid_games = False
                     
         if not valid_games:
             raise Exception("Something wrong in games table")
-                
-                
-                
+
+
     def get_players_list(self) -> list:
         """
         Return a list of all players in the game table.
 
-        The list is composed of all players that were either playing on a court or benched.
+        The list is composed of all players that were either playing on a court or benched
+        during the first game.
         """
         players = []
-        court_list = list(self._game_table.keys())
+        game1 = self._game_table[0]
+        court_list = list(game1.keys())
         for court in court_list:
-            games = self._game_table[court]
-            game1 = games[list(games.keys())[0]]
+            if court == "Game":
+                # Game's name, no player in this element.
+                continue
             if court == "Bench":
                 # Add all benched players
-                players += game1
+                players += game1[court]
             else:
-                # For each court, read players in first game.
-                players += game1['Team1']
-                players += game1['Team2']
+                # For each court, add players in each team.
+                players += game1[court]['Team1']
+                players += game1[court]['Team2']
         # Find longest player name
         longest_name = 0
         for player in players:
@@ -104,16 +104,13 @@ class GamesTable:
         bench_list = []
         if player is None:
             return bench_list
-        games = self._game_table["Bench"]
-        cumulative_benching = 0
-        for game in games.keys():
-            if player in games[game]:
-                cumulative_benching += 1
-            bench_list.append(cumulative_benching)
+        for game in self._game_table:
+            bench = game.get("Bench", None)
+            if player in bench:
+                bench_list += [game['Game']]
         return bench_list
     
     def print_court(self, court_name):
-        games = self._game_table[court_name]
         print(f"/------------------------\\")
         print(f"|    Court: {court_name:12s} |")
         grid = ['+--------+',
@@ -124,14 +121,14 @@ class GamesTable:
                 '| Team 2 |',
                 '|--------|',
                 ]
-        for game in games.keys():
+        for game in self._game_table:
             grid[0] += f"-------|"
-            grid[1] += f" {game:^5s} |"
+            grid[1] += f" {game['Game']:^5s} |"
             grid[2] += f"-------|"
-            player = [games[game]['Team1'][0], games[game]['Team1'][1]]
+            player = [game[court_name]['Team1'][0], game[court_name]['Team1'][1]]
             grid[3] += f" {player[0]:>2s},{player[1]:<2s} |"
             grid[4] += f"   vs  |"
-            player = [games[game]['Team2'][0], games[game]['Team2'][1]]
+            player = [game[court_name]['Team2'][0], game[court_name]['Team2'][1]]
             grid[5] += f" {player[0]:>2s},{player[1]:<2s} |"
             grid[6] += f"-------+"
 
@@ -139,25 +136,28 @@ class GamesTable:
             print(line)
 
     def print_bench(self):
-        name = "Bench"
-        games = self._game_table[name]
+        bench_tag = "Bench"
+        if bench_tag not in self._game_table[0]:
+            return
+        nb_benched_players = len(self._game_table[0][bench_tag])
+        if nb_benched_players == 0:
+            return
+        
         print(f"/----------------\\")
-        print(f"|   {name:12s} |")
+        print(f"|   {bench_tag:12s} |")
         grid = ['+--------+',
                 '| Game   |',
                 '|--------+',
                 ]
-        game_list = list(games.keys())
-        nb_benched_players = len(games[game_list[0]])
         for i in range(nb_benched_players):
             grid.append('|        |')
         grid.append('+--------+')
-        for game in game_list:
+        for game in self._game_table:
             grid[0] += f"-------+"
-            grid[1] += f" {game:^5s} |"
+            grid[1] += f" {game['Game']:^5s} |"
             grid[2] += f"-------+"
             for i in range(nb_benched_players):
-                player = games[game][i]
+                player = game[bench_tag][i]
                 grid[3+i] += f" {player:^5s} |"
             grid[3+nb_benched_players] += f"-------+"
 
@@ -165,14 +165,9 @@ class GamesTable:
             print(line)
 
     def print(self):
-        has_bench = False
-        court_list = list(self._game_table.keys())
-        for court in court_list:
-            if court == "Bench":
-                has_bench = True
-            else:
+        first_game = self._game_table[0]
+        for court in first_game.keys():
+            if court.startswith("Terrain"):
                 self.print_court(court)
-
-        if has_bench:
-            self.print_bench()
+        self.print_bench()
 

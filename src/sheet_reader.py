@@ -11,11 +11,12 @@ class SheetReader:
         self._csv_file = filename
 
     def read(self):
-        game_table = {}
-        with open(self._csv_file, newline="") as csvfile:
+        game_table = []
+        with open(self._csv_file, newline="") as csv_file:
             self._logger.info(f"Reading CSV file: {self._csv_file} ...")
-            reader = csv.reader(csvfile, delimiter=",")  # , quotechar='|'
+            reader = csv.reader(csv_file, delimiter=",")  # , quotechar='|'
             is_new_court = False
+            court_name = None
             in_pause = False
             game_tags = []
             nb_of_games = 0
@@ -23,47 +24,48 @@ class SheetReader:
                 while len(row) and row[len(row) - 1] == "":
                     row.pop()
                 self._logger.debug(f"Analyzing row: {' : '.join(row)}")
-                if row[0].startswith("Terrain"):
+                if len(game_tags) == 0 and not row[0].startswith("Terrain"):
+                    game_tags = row
+                    nb_of_games = len(game_tags)
+                    for i in range(nb_of_games):
+                        game_table.append({"Game" : game_tags[i]})
+
+                elif row[0].startswith("Terrain"):
                     court_name = self.extract_court_name(row[0])
                     is_new_court = True
                     self._logger.info(f"New court: {court_name}")
+
                 elif row[0] == "Pause":
                     if in_pause:
                         self._logger.error(f"Too many Pause section in file!")
                     else:
                         in_pause = True
                         self._logger.info(f"Reading pause section ...")
-                        game_table["Bench"] = {}
                         for i, game in enumerate(game_tags):
-                            game_table["Bench"][game] = []
+                            game_table[i]["Bench"] = []
+
                 elif is_new_court:
-                    if len(game_tags) == 0:
-                        game_tags = row
-                        nb_of_games = len(game_tags)
-                    else:
-                        game_table[court_name] = {}
-                        is_new_court = False
-                        for i, game in enumerate(game_tags):
-                            game_table[court_name][game] = {
-                                "Team1": [row[i]],
-                                "Team2": [],
-                            }
+                    is_new_court = False
+                    for i, game in enumerate(game_tags):
+                        game_table[i][court_name] = {
+                            "Team1": [row[i]],
+                            "Team2": [],
+                        }
 
                 elif in_pause:
                     for i, game in enumerate(game_tags):
-                        game_table["Bench"][game] += [row[i]]
+                        game_table[i]["Bench"] += [row[i]]
 
                 else:
-                    t1 = game_table[court_name][game]["Team1"]
-                    t2 = game_table[court_name][game]["Team2"]
-                    if len(game_table[court_name][game]["Team1"]) == 1:
-                        for i, game in enumerate(game_tags):
+                    for i, game in enumerate(game_tags):
+                        if len(game_table[i][court_name]["Team1"]) == 1:
                             p = row[i]
-                            t = game_table[court_name][game]["Team1"]
-                            game_table[court_name][game]["Team1"] += [row[i]]
-                    elif len(game_table[court_name][game]["Team2"]) < 2:
-                        for i, game in enumerate(game_tags):
-                            game_table[court_name][game]["Team2"] += [row[i]]
+                            t = game_table[i][court_name]["Team1"]
+                            game_table[i][court_name]["Team1"] += [row[i]]
+                        elif len(game_table[i][court_name]["Team2"]) < 2:
+                            game_table[i][court_name]["Team2"] += [row[i]]
+                        else:
+                            self._logger.error(f"Too many players in game {game_table[i]['Game']} on court {court_name}")
 
         return game_table
 

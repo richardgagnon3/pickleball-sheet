@@ -35,7 +35,7 @@ class PlayerStatistics:
         self._logger.debug(f"New {self.__class__.__name__} object created for player {self._player}")
 
     def analyze_games(self, game_table: GamesTable):
-        bench = game_table.get_bench(self._player.name)
-        self._logger.debug(f"Player {self._player.name} benched {(bench[-1])} times as: {bench}")
+        self._bench_seq = game_table.get_bench(self._player.name)
+        self._logger.debug(f"Player {self._player.name} benched {len(self._bench_seq)} times for games: {self._bench_seq}")
         # TODO Like in Excel, build cumulative benching array.
         # TODO Analyze consecutive benching, nb of game between benching, ...

@@ -1,0 +1,46 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug sheet evaluator",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}src/sheet_evaluator.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}${pathSeparator}${env:PYTHONPATH}"
+            },
+            "justMyCode": true,
+            "args": [
+                "games/06j-1t.csv",
+                "-l",
+                "10",
+                "-s"
+            ],
+        },
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "${fileDirname}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}${pathSeparator}${env:PYTHONPATH}"
+            },
+            "justMyCode": true,
+            "args": [
+                "${workspaceFolder}${pathSeparator}games/14j-3t.csv",
+                "-l",
+                "10"
+            ],
+            "purpose": [
+                "debug-in-terminal"
+            ]
+        }
+    ]
+}
