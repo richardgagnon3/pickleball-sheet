@@ -6,6 +6,18 @@ from games_table import GamesTable
 from player import Player, PlayerStatistics
 from sheet_reader import SheetReader
 
+LEVEL_ARGS = ["debug", "info", "warning", "error"]
+LEVEL_ARGS_SHORT = ["d", "i", "w", "e"]
+ARGS_TO_LEVEL = {
+    "d": logging.DEBUG,
+    "debug": logging.DEBUG,
+    "i": logging.INFO,
+    "info": logging.INFO,
+    "w": logging.WARNING,
+    "warning": logging.WARNING,
+    "e": logging.ERROR,
+    "error": logging.ERROR,
+}
 _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.DEBUG)
 _logger.info("Running %s", __file__)
@@ -27,10 +39,9 @@ _parser = argparse.ArgumentParser(
 
 _parser.add_argument("csv_file")  # Input file with games/courts
 _parser.add_argument("-s", "--show", action="store_true", help="Show the game table read from the input file")
-_parser.add_argument("-l", "--level", choices=[10, 20, 30, 40, 50], type=int, default=20)  # log level
+_parser.add_argument("-l", "--level", type=str, default="info", help="Log level", choices=LEVEL_ARGS+LEVEL_ARGS_SHORT)  # log level
 args = _parser.parse_args()
-# TODO: Validate level value (or force a list of levels for argument -l)
-_logger.setLevel(args.level)
+_logger.setLevel(ARGS_TO_LEVEL[args.level])
 _logger.debug(f"CSV File: {args.csv_file}, log level: {args.level}")
 
 csv_file = args.csv_file
@@ -54,4 +65,3 @@ try:
 except Exception as e:
     _logger.error(f"Exception raised: {e}")
     exit(1)
-
