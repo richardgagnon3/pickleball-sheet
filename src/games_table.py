@@ -8,7 +8,6 @@ class GamesTable:
         self._game_table = table
         self._validate_table()
 
-
     def _validate_table(self):
         valid_games = True
         g1_players = self.get_players_list()
@@ -58,6 +57,13 @@ class GamesTable:
         if not valid_games:
             raise Exception("Something wrong in games table")
 
+    def get_games_list(self) -> list:
+        """Returns the list of games contains into the game table.
+
+        Returns:
+            list: list of games identifiers
+        """
+        return [game['Game'] for game in self._game_table]
 
     def get_players_list(self) -> list:
         """
@@ -101,13 +107,15 @@ class GamesTable:
         return players
 
     def get_bench(self, player=None):
-        bench_list = []
+        nb_games = len(self._game_table)
+        # Initialize benching array with 0 for nb of games
+        bench_list = [0] * nb_games
         if player is None:
             return bench_list
-        for game in self._game_table:
+        for i, game in enumerate(self._game_table):
             bench = game.get("Bench", None)
             if player in bench:
-                bench_list += [game['Game']]
+                bench_list[i] = game['Game']
         return bench_list
     
     def print_court(self, court_name):

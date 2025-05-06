@@ -62,6 +62,12 @@ try:
         stats = PlayerStatistics(player)
         stats.analyze_games(game_table)
         players_stat[p] = stats
+
+    print_header = True
+    for p in players_stat:
+        players_stat[p].print(print_header)
+        print_header = False
+
 except Exception as e:
     _logger.error(f"Exception raised: {e}")
     exit(1)

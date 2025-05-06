@@ -21,6 +21,10 @@ class SheetReader:
             game_tags = []
             nb_of_games = 0
             for row in reader:
+                # Remove spaces from all entries in row.
+                for i in range(len(row)):
+                    if isinstance(row[i], str):
+                        row[i] = row[i].strip()            
                 while len(row) and row[len(row) - 1] == "":
                     row.pop()
                 self._logger.debug(f"Analyzing row: {' : '.join(row)}")

@@ -16,9 +16,9 @@
             },
             "justMyCode": true,
             "args": [
-                "games/06j-1t.csv",
+                "games/16j-3t.csv",
                 "-l",
-                "10",
+                "debug",
                 "-s"
             ],
         },
