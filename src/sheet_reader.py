@@ -10,7 +10,7 @@ class SheetReader:
         self._logger.debug(f"New {self.__class__.__name__} object created")
         self._csv_file = filename
 
-    def read(self):
+    def read(self) -> list:
         game_table = []
         with open(self._csv_file, newline="") as csv_file:
             self._logger.info(f"Reading CSV file: {self._csv_file} ...")
