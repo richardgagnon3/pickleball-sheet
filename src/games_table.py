@@ -2,7 +2,7 @@ import logging
 
 class GamesTable:
     
-    def __init__(self, table: dict) -> None:
+    def __init__(self, table: list) -> None:
         self._logger = logging.getLogger("__main__")
         self._logger.debug(f"New {self.__class__.__name__} object created")
         self._game_table = table

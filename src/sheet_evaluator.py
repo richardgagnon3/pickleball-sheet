@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import pandas as pd
 
 from games_table import GamesTable
 from player import Player, PlayerStatistics
@@ -51,7 +52,8 @@ if not os.path.isfile(csv_file):
 
 try:
     csv_reader = SheetReader(csv_file)
-    game_table = GamesTable(csv_reader.read())
+    file_data = csv_reader.read()
+    game_table = GamesTable(file_data)
     if args.show:
         game_table.print()
 
@@ -60,7 +62,7 @@ try:
     for p in players_list:
         player = Player(p)
         stats = PlayerStatistics(player)
-        stats.analyze_games(game_table)
+        stats.analyze_benching(game_table)
         players_stat[p] = stats
 
     print_header = True
@@ -68,6 +70,16 @@ try:
         players_stat[p].print(print_header)
         print_header = False
 
+    # TODO Compute stats about overall players playing time
+    overall_stats = pd.DataFrame()
+    for p in players_stat:
+        # TODO Add to the data frame:
+        # - Player name
+        # - Nb of games
+        # - Nb of pauses
+        # ...
+        pass
+        
 except Exception as e:
     _logger.error(f"Exception raised: {e}")
     exit(1)

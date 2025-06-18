@@ -1,5 +1,6 @@
 import logging
 
+from base_statistics import BaseStatistics
 from games_table import GamesTable
 
 _logger = logging.getLogger("__main__")
@@ -24,43 +25,6 @@ class Player:
     def name(self):
         return self._name
 
-class BaseStatistics:
-    _size = 0
-    _avg = 0
-    _min = 0
-    _max = 0
-    _var = 0
-    _std = 0                              
-    
-    def __init__(self, data: list) -> None:
-        self._data = list(data)
-        self._size = len(self._data)
-        self._avg = sum(self._data) / len(self._data)
-        self._min = min(self._data)
-        self._max = max(self._data)
-        # Calculate standard deviation
-        self._var = sum((x - self._avg) ** 2 for x in self._data) / len(self._data)
-        self._std = self._var ** 0.5
-
-    def __str__(self):
-        return f"Size={self._size}, Avg={self._avg}, Min={self._min}, Max={self._max} : {self._data}"
-
-    @property
-    def avg(self):
-        return self._avg
-    @property
-    def min(self):
-        return self._min
-    @property
-    def max(self):
-        return self._max
-    @property
-    def std(self):
-        return self._std
-    @property
-    def var(self):
-        return self._var
-    
 class PlayerStatistics:
     _logger = _logger
 
@@ -73,7 +37,7 @@ class PlayerStatistics:
         self._between_pause_stats = None
         self._logger.debug(f"New {self.__class__.__name__} object created for player {self._player}")
 
-    def analyze_games(self, game_table: GamesTable):
+    def analyze_benching(self, game_table: GamesTable):
         self._bench_seq = game_table.get_bench(self._player.name)
         benched_games = list(set(self._bench_seq) - {0})
         benched_games.sort()
@@ -97,15 +61,12 @@ class PlayerStatistics:
             games_between_pauses.append(consecutive_played_games)
         self._between_pause_stats = BaseStatistics(games_between_pauses)
         self._logger.info(f"Between pause stats for player {self._player.name}: {self._between_pause_stats}")
-        # TODO Like in Excel, build cumulative benching array.
-        # TODO Analyze consecutive benching, nb of game between benching, ...
-        #self._logger.info(f"Player {self._player.name} benched {self._nb_pauses} times for games: {benched_games}")
 
     def print(self, print_header: bool = False):
         format_heading = "|%6s|%6s|%6s|%5s|%5s|%5s|%5s|%5s|%s"
         format_data    = "|%6s|%6d|%6d|%5d|%5.1f|%5d|%5.2f|%5.2f|%s"
         if print_header:
-            print( "-"*70 )
+            print( "="*75 )
             print(format_heading % ("Player", 
                                     "Games", 
                                     "Pauses", 
@@ -115,7 +76,7 @@ class PlayerStatistics:
                                     "Std", 
                                     "Var",
                                     "Games between pauses"))
-            print( "-"*80 )
+            print( "="*75 )
         print(format_data % (self._player.name, 
               self._nb_games, 
               self._nb_pauses, 
@@ -125,4 +86,4 @@ class PlayerStatistics:
               self._between_pause_stats.std, 
               self._between_pause_stats.var,
               str(self._between_pause_stats._data)))
-        print( "-"*80 )
+        print( "-"*75 )
