@@ -7,6 +7,7 @@ addopts = [
     "-s",
 ]
 
+# Following configurations are for pylint does not seems to be active within VS Code, so .vscode/settings.json has been used.
 [tool.pylint.messages_control]
 # Disable specific warnings by their codes or names
 disable = [

@@ -18,5 +18,15 @@
     "python.testing.pytestArgs": [
         "."
     ],
-    "terminal.integrated.env.osx": {"PYTHONPATH": "${workspaceFolder}/src"}
+    "terminal.integrated.env.osx": {"PYTHONPATH": "${workspaceFolder}/src"},
+    "pylint.args": [
+        "--disable=C0114,C0115,C0116,R0903,W0613",
+        "--disable=C0103", // invalid-name
+        "--max-line-length=120"
+    ],
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true,
+    "cSpell.words": [
+        "pickleball"
+    ]
 }
