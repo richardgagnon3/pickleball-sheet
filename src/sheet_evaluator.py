@@ -40,14 +40,21 @@ _parser = argparse.ArgumentParser(
 
 _parser.add_argument("csv_file")  # Input file with games/courts
 _parser.add_argument("-s", "--show", action="store_true", help="Show the game table read from the input file")
-_parser.add_argument("-l", "--level", type=str, default="info", help="Log level", choices=LEVEL_ARGS+LEVEL_ARGS_SHORT)  # log level
+_parser.add_argument(
+    "-l",
+    "--level",
+    type=str,
+    default="info",
+    help="Log level",
+    choices=LEVEL_ARGS + LEVEL_ARGS_SHORT,
+)  # log level
 args = _parser.parse_args()
 _logger.setLevel(ARGS_TO_LEVEL[args.level])
-_logger.debug(f"CSV File: {args.csv_file}, log level: {args.level}")
+_logger.debug("CSV File: %s, log level: %s", args.csv_file, args.level)
 
 csv_file = args.csv_file
 if not os.path.isfile(csv_file):
-    _logger.error(f"File {csv_file} does not exist!")
+    _logger.error("File %s does not exist!", csv_file)
     exit(1)
 
 try:
@@ -66,8 +73,8 @@ try:
         players_stat[p] = stats
 
     print_header = True
-    for p in players_stat:
-        players_stat[p].print(print_header)
+    for player, stats in players_stat.items():
+        stats.print(print_header)
         print_header = False
 
     # TODO Compute stats about overall players playing time

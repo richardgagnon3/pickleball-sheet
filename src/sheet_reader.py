@@ -23,9 +23,9 @@ class SheetReader:
             nb_of_games = 0
             for row in reader:
                 # Remove spaces from all entries in row.
-                for i in range(len(row)):
-                    if isinstance(row[i], str):
-                        row[i] = row[i].strip()
+                for i, cell in enumerate(row):
+                    if isinstance(cell, str):
+                        row[i] = cell.strip()
                 while len(row) and row[len(row) - 1] == "":
                     row.pop()
                 self._logger.debug("Analyzing row: %s", " : ".join(row))
@@ -51,22 +51,21 @@ class SheetReader:
 
                 elif is_new_court:
                     is_new_court = False
-                    for i, game in enumerate(game_tags):
+                    for i, _game in enumerate(game_tags):
                         game_table[i][court_name] = {
                             "Team1": [row[i]],
                             "Team2": [],
                         }
 
                 elif in_pause:
-                    for i, game in enumerate(game_tags):
+                    for i, _game in enumerate(game_tags):
                         game_table[i]["Bench"] += [row[i]]
 
                 else:
-                    for i, game in enumerate(game_tags):
+                    for i, _game in enumerate(game_tags):
                         if len(game_table[i][court_name]["Team1"]) == 1:
                             p = row[i]
-                            t = game_table[i][court_name]["Team1"]
-                            game_table[i][court_name]["Team1"] += [row[i]]
+                            game_table[i][court_name]["Team1"] += [p]
                         elif len(game_table[i][court_name]["Team2"]) < 2:
                             game_table[i][court_name]["Team2"] += [row[i]]
                         else:
