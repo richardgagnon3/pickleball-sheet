@@ -4,8 +4,8 @@ class BaseStatistics:
     _min = 0
     _max = 0
     _var = 0
-    _std = 0                              
-    
+    _std = 0
+
     def __init__(self, data: list) -> None:
         self._data = list(data)
         self._size = len(self._data)
@@ -34,4 +34,6 @@ class BaseStatistics:
     @property
     def var(self):
         return self._var
-    
+    @property
+    def data(self):
+        return self._data

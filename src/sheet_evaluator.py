@@ -72,21 +72,40 @@ try:
         stats.analyze_benching(game_table)
         players_stat[p] = stats
 
-    print_header = True
-    for player, stats in players_stat.items():
-        stats.print(print_header)
-        print_header = False
+    if _logger.isEnabledFor(logging.DEBUG):
+        print_header = True
+        for player, stats in players_stat.items():
+            stats.print(print_header)
+            print_header = False
 
     # TODO Compute stats about overall players playing time
     overall_stats = pd.DataFrame()
-    for p in players_stat:
-        # TODO Add to the data frame:
-        # - Player name
-        # - Nb of games
-        # - Nb of pauses
-        # ...
-        pass
-        
+    overall_stats_columns = [
+        "player",
+        "games",
+        "pauses",
+        "inter_bench_min",
+        "inter_bench_avg",
+        "inter_bench_max",
+        "inter_bench_std",
+        "inter_bench_var",
+    ]
+    overall_stats = pd.DataFrame(columns=overall_stats_columns)
+    for player, stats in players_stat.items():
+        player_stats = stats.toDict()
+        overall_stats = overall_stats.merge(
+            pd.DataFrame([player_stats], columns=overall_stats_columns),
+            how="outer",)
+    if _logger.isEnabledFor(logging.DEBUG):
+        print("\nOverall statistics data frame:")
+        print(overall_stats.to_string(index=False))
+
+    # First criteria (lower is better): Number of played games standard deviation
+    #    - 0 means everybody has played the same number of games
+    #     - A sub-criteria could be that the difference between min and max should not be greater than 1.
+    # Second criteria (lower is better): Average games played between pauses standard deviation
+    #     - low deviation means that players have similar playing times between benching
+    #     - A sub-criteria could be that inter_bench_min cannot be 0 (would mean a player is benching twice in a row).
 except Exception as e:
     _logger.error(f"Exception raised: {e}")
     exit(1)
