@@ -101,11 +101,36 @@ try:
         print(overall_stats.to_string(index=False))
 
     # First criteria (lower is better): Number of played games standard deviation
-    #    - 0 means everybody has played the same number of games
-    #     - A sub-criteria could be that the difference between min and max should not be greater than 1.
+    #   - 0 means everybody has played the same number of games
+    #   - A sub-criteria could be that the difference between min and max should not be greater than 1.
     # Second criteria (lower is better): Average games played between pauses standard deviation
-    #     - low deviation means that players have similar playing times between benching
-    #     - A sub-criteria could be that inter_bench_min cannot be 0 (would mean a player is benching twice in a row).
+    #   - low deviation means that players have similar playing times between benching
+    #   - A sub-criteria could be that inter_bench_min cannot be 0 (would mean a player is benching twice in a row).
+    played_games_std = overall_stats["games"].std()
+    max_games_diff = overall_stats["games"].max() - overall_stats["games"].min()
+    if max_games_diff > 1:
+        _logger.warning(
+            "The difference between the maximum and minimum number of played games is greater than 1 (%d)!",
+            max_games_diff)
+    inter_bench_avg_std = overall_stats["inter_bench_avg"].std()
+    if overall_stats["inter_bench_min"].min() == 0:
+        # Print players with 0 inter-bench time
+        benched_twice_players = overall_stats[overall_stats["inter_bench_min"] == 0]["player"].tolist()
+        _logger.warning("Players benched twice in a row: %s", ", ".join(benched_twice_players))
+    print(f"\nOverall statistics for file {csv_file}:")
+    print(f"  Played games standard deviation: {played_games_std:.2f}")
+    print(f"    Difference between max and min played games: {max_games_diff}")
+    print(f"  Inter-bench average standard deviation: {inter_bench_avg_std:.2f}")
+    print(
+        f"     Inter-bench range: {overall_stats['inter_bench_min'].min()} - {overall_stats['inter_bench_max'].max()}"
+    )
+    # Print player with lowest inter-bench time
+    if overall_stats["inter_bench_min"].min() != overall_stats["inter_bench_min"].max():
+        quick_benched_players = overall_stats[
+            overall_stats["inter_bench_min"] == overall_stats["inter_bench_min"].min()
+        ]["player"].tolist()
+        print(f"     Player with lowest inter-bench time: {quick_benched_players}")
+
 except Exception as e:
-    _logger.error(f"Exception raised: {e}")
+    _logger.error("Exception raised: %s", e)
     exit(1)
