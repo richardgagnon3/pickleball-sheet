@@ -152,7 +152,7 @@ class SheetEditorGUI:
         _logger.info("Loaded CSV file: %s", file_path)
 
     def populate_table(self):
-        """Populate the table with parsed game data."""
+        """Populate the table with parsed game data in detailed layout."""
         if not self.games_data:
             return
 
@@ -160,61 +160,101 @@ class SheetEditorGUI:
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        # Setup columns based on game structure
-        columns = ['Game', 'Court', 'Team1_P1', 'Team1_P2', 'Team2_P1', 'Team2_P2', 'Bench']
+        # Create dynamic columns based on number of games
+        num_games = len(self.games_data)
+        columns = ['Court_Team'] + [f'Game_{i+1}' for i in range(num_games)]
         self.tree['columns'] = columns
 
         # Configure column headings and widths
-        col_widths = {'Game': 80, 'Court': 100, 'Team1_P1': 80, 'Team1_P2': 80, 
-                     'Team2_P1': 80, 'Team2_P2': 80, 'Bench': 120}
+        self.tree.heading('Court_Team', text='Court/Team')
+        self.tree.column('Court_Team', width=120, minwidth=100)
         
-        for col in columns:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=col_widths.get(col, 100), minwidth=60)
+        for i in range(num_games):
+            game_name = self.games_data[i].get('Game', f'p{i+1}')
+            self.tree.heading(f'Game_{i+1}', text=game_name)
+            self.tree.column(f'Game_{i+1}', width=80, minwidth=60)
 
-        # Insert game data
-        for game_idx, game in enumerate(self.games_data):
-            game_name = game.get('Game', f'Game {game_idx + 1}')
-            
-            # Find courts (exclude 'Game' and 'Bench' keys)
+        # Find all courts across all games
+        all_courts = set()
+        for game in self.games_data:
             courts = [key for key in game.keys() if key not in ['Game', 'Bench']]
-            
-            if not courts:
-                # No court data, just show game and bench
-                bench_players = ', '.join(str(p) for p in game.get('Bench', []))
-                row_data = [game_name, '', '', '', '', '', bench_players]
-                item = self.tree.insert('', 'end', values=row_data, 
-                                      tags=(f'game_{game_idx}', f'court_none'))
-            else:
-                # Show each court as a separate row
-                for court_idx, court_name in enumerate(courts):
-                    court_data = game[court_name]
-                    
-                    # Extract team data
-                    team1 = court_data.get('Team1', [])
-                    team2 = court_data.get('Team2', [])
-                    
-                    team1_p1 = str(team1[0]) if len(team1) > 0 else ''
-                    team1_p2 = str(team1[1]) if len(team1) > 1 else ''
-                    team2_p1 = str(team2[0]) if len(team2) > 0 else ''
-                    team2_p2 = str(team2[1]) if len(team2) > 1 else ''
-                    
-                    # Show bench only for first court row
-                    bench_players = ''
-                    if court_idx == 0:
-                        bench_players = ', '.join(str(p) for p in game.get('Bench', []))
-                    
-                    row_data = [game_name if court_idx == 0 else '', 
-                               court_name, team1_p1, team1_p2, team2_p1, team2_p2, bench_players]
-                    
-                    item = self.tree.insert('', 'end', values=row_data, 
-                                          tags=(f'game_{game_idx}', f'court_{court_name}'))
-                    
-                    # Add alternating row colors
-                    if game_idx % 2 == 0:
-                        self.tree.tag_configure(f'game_{game_idx}', background='#f8f8f8')
+            all_courts.update(courts)
+        
+        all_courts = sorted(list(all_courts))
 
-        _logger.debug("Populated table with %d games", len(self.games_data))
+        # Insert court data
+        for court_name in all_courts:
+            # Insert court header
+            court_header_data = [f"=== {court_name} ==="] + [''] * num_games
+            court_item = self.tree.insert('', 'end', values=court_header_data, 
+                                        tags=('court_header',))
+            self.tree.tag_configure('court_header', background='#e0e0e0', font=('Arial', 10, 'bold'))
+            
+            # Team 1 row
+            team1_data = ['Team 1']
+            for game in self.games_data:
+                if court_name in game:
+                    team1 = game[court_name].get('Team1', [])
+                    team1_str = ','.join(str(p) for p in team1 if p)
+                else:
+                    team1_str = ''
+                team1_data.append(team1_str)
+            
+            team1_item = self.tree.insert('', 'end', values=team1_data, 
+                                        tags=('team1', court_name))
+            self.tree.tag_configure('team1', background='#f0f8ff')
+            
+            # VS row
+            vs_data = ['   vs'] + ['vs'] * num_games
+            vs_item = self.tree.insert('', 'end', values=vs_data, 
+                                     tags=('vs_row',))
+            self.tree.tag_configure('vs_row', background='#fffacd', font=('Arial', 8, 'italic'))
+            
+            # Team 2 row  
+            team2_data = ['Team 2']
+            for game in self.games_data:
+                if court_name in game:
+                    team2 = game[court_name].get('Team2', [])
+                    team2_str = ','.join(str(p) for p in team2 if p)
+                else:
+                    team2_str = ''
+                team2_data.append(team2_str)
+            
+            team2_item = self.tree.insert('', 'end', values=team2_data, 
+                                        tags=('team2', court_name))
+            self.tree.tag_configure('team2', background='#ffe4e1')
+            
+            # Separator
+            sep_data = [''] + [''] * num_games
+            self.tree.insert('', 'end', values=sep_data, tags=('separator',))
+
+        # Bench section
+        bench_header_data = ['=== BENCH ==='] + [''] * num_games
+        bench_header_item = self.tree.insert('', 'end', values=bench_header_data, 
+                                           tags=('bench_header',))
+        self.tree.tag_configure('bench_header', background='#ffeb9c', font=('Arial', 10, 'bold'))
+        
+        # Find maximum bench players across all games
+        max_bench = 0
+        for game in self.games_data:
+            bench_size = len(game.get('Bench', []))
+            max_bench = max(max_bench, bench_size)
+        
+        # Create rows for each bench position
+        for bench_pos in range(max_bench):
+            bench_data = [f'Bench {bench_pos + 1}']
+            for game in self.games_data:
+                bench_players = game.get('Bench', [])
+                if bench_pos < len(bench_players):
+                    bench_data.append(str(bench_players[bench_pos]))
+                else:
+                    bench_data.append('')
+            
+            bench_item = self.tree.insert('', 'end', values=bench_data, 
+                                        tags=('bench_row',))
+            self.tree.tag_configure('bench_row', background='#f5f5dc')
+
+        _logger.debug("Populated table with %d games in detailed layout", len(self.games_data))
     
     def on_item_double_click(self, event):
         """Handle double-click on table item for editing."""
@@ -226,22 +266,89 @@ class SheetEditorGUI:
 
         if column:
             col_index = int(column.replace('#', '')) - 1
-            columns = ['Game', 'Court', 'Team1_P1', 'Team1_P2', 'Team2_P1', 'Team2_P2', 'Bench']
             
-            # Only allow editing player positions and bench
-            if col_index >= 2 and col_index < len(columns):  # Team1_P1, Team1_P2, Team2_P1, Team2_P2, Bench
-                column_name = columns[col_index]
+            # Get item tags to determine what type of row this is
+            tags = self.tree.item(item)['tags']
+            if not tags:
+                return
+                
+            row_type = tags[0]
+            
+            # Only allow editing team and bench rows
+            if row_type in ['team1', 'team2', 'bench_row']:
+                if col_index == 0:  # Don't edit the first column (labels)
+                    return
+                    
                 current_value = self.tree.item(item)['values'][col_index] if col_index < len(self.tree.item(item)['values']) else ''
                 
-                # Get game and court info from tags
-                tags = self.tree.item(item)['tags']
-                if len(tags) >= 2:
-                    game_tag = tags[0]  # format: game_X
-                    court_tag = tags[1]  # format: court_Y
-                    
-                    # Create edit dialog
-                    self.edit_player_cell(game_tag, court_tag, column_name, current_value, item, col_index)
+                # Determine game index from column
+                game_idx = col_index - 1  # Subtract 1 because first column is labels
+                if game_idx >= len(self.games_data):
+                    return
+                
+                # Get court name if it's a team row
+                court_name = None
+                if len(tags) > 1 and row_type in ['team1', 'team2']:
+                    court_name = tags[1]
+                
+                # Create edit dialog
+                self.edit_player_cell_new_layout(game_idx, court_name, row_type, current_value, item, col_index)
 
+    def edit_player_cell_new_layout(self, game_idx: int, court_name: str | None, row_type: str, current_value: str, tree_item, col_index: int):
+        """Open dialog to edit player assignment in new layout."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Edit Player Assignment")
+        dialog.geometry("350x250")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Center dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        # Display info
+        game_name = self.games_data[game_idx].get('Game', f'Game {game_idx + 1}')
+        ttk.Label(dialog, text=f"Game: {game_name}").pack(pady=5)
+        
+        if court_name:
+            ttk.Label(dialog, text=f"Court: {court_name}").pack(pady=5)
+        
+        if row_type == 'team1':
+            ttk.Label(dialog, text="Position: Team 1").pack(pady=5)
+            ttk.Label(dialog, text="Enter players separated by commas (e.g., 1,2):").pack(pady=5)
+        elif row_type == 'team2':
+            ttk.Label(dialog, text="Position: Team 2").pack(pady=5)
+            ttk.Label(dialog, text="Enter players separated by commas (e.g., 3,4):").pack(pady=5)
+        elif row_type == 'bench_row':
+            ttk.Label(dialog, text="Position: Bench").pack(pady=5)
+            ttk.Label(dialog, text="Enter bench player number:").pack(pady=5)
+
+        entry = ttk.Entry(dialog, width=30)
+        entry.pack(pady=10)
+        entry.insert(0, current_value)
+        entry.focus()
+        entry.select_range(0, tk.END)
+
+        def save_value():
+            new_value = entry.get().strip()
+            self.update_player_assignment_new_layout(game_idx, court_name, row_type, new_value, tree_item, col_index)
+            dialog.destroy()
+
+        def cancel():
+            dialog.destroy()
+
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=15)
+
+        ttk.Button(button_frame, text="Save", command=save_value).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=cancel).pack(side=tk.LEFT, padx=5)
+
+        # Bind Enter and Escape keys
+        dialog.bind('<Return>', lambda e: save_value())
+        dialog.bind('<Escape>', lambda e: cancel())
+    
     def edit_player_cell(self, game_tag: str, court_tag: str, column_name: str, current_value: str, tree_item, col_index: int):
         """Open dialog to edit player assignment."""
         dialog = tk.Toplevel(self.root)
@@ -293,6 +400,77 @@ class SheetEditorGUI:
         # Bind Enter and Escape keys
         dialog.bind('<Return>', lambda e: save_value())
         dialog.bind('<Escape>', lambda e: cancel())
+
+    def update_player_assignment_new_layout(self, game_idx: int, court_name: str | None, row_type: str, new_value: str, tree_item, col_index: int):
+        """Update player assignment in new layout format."""
+        if game_idx >= len(self.games_data):
+            _logger.error("Game index %d out of range", game_idx)
+            return
+
+        game = self.games_data[game_idx]
+
+        try:
+            if row_type == 'bench_row':
+                # Handle bench players - find which bench position this is
+                bench_players = game.get('Bench', [])
+                
+                # Get the row label to determine bench position
+                current_values = list(self.tree.item(tree_item)['values'])
+                row_label = current_values[0] if current_values else ''
+                
+                if 'Bench' in row_label:
+                    # Extract bench position number
+                    try:
+                        bench_pos = int(row_label.split()[-1]) - 1  # Convert to 0-based index
+                    except (ValueError, IndexError):
+                        bench_pos = 0
+                    
+                    # Ensure bench list is long enough
+                    while len(bench_players) <= bench_pos:
+                        bench_players.append('')
+                    
+                    if new_value.strip():
+                        bench_players[bench_pos] = new_value.strip()
+                    else:
+                        bench_players[bench_pos] = ''
+                    
+                    # Remove empty entries from the end
+                    while bench_players and bench_players[-1] == '':
+                        bench_players.pop()
+                    
+                    game['Bench'] = bench_players
+
+            elif row_type in ['team1', 'team2'] and court_name:
+                # Handle team assignments
+                if court_name not in game:
+                    game[court_name] = {'Team1': [], 'Team2': []}
+                
+                court_data = game[court_name]
+                team_key = 'Team1' if row_type == 'team1' else 'Team2'
+                
+                if new_value.strip():
+                    # Parse comma-separated players
+                    players = [p.strip() for p in new_value.split(',') if p.strip()]
+                    court_data[team_key] = players
+                else:
+                    court_data[team_key] = []
+
+            # Update table display
+            current_values = list(self.tree.item(tree_item)['values'])
+            while len(current_values) <= col_index:
+                current_values.append('')
+            current_values[col_index] = new_value
+            self.tree.item(tree_item, values=current_values)
+
+            # Update CSV data for saving
+            self.update_csv_from_games()
+
+            self.status_bar.config(text=f"Updated {row_type} to '{new_value}'")
+            _logger.debug("Updated %s to '%s' in game %d", row_type, new_value, game_idx)
+
+        except Exception as e:
+            _logger.error("Failed to update player assignment: %s", str(e))
+            messagebox.showerror("Error", f"Failed to update player assignment: {str(e)}")
 
     def update_player_assignment(self, game_idx: int, court_name: str | None, column_name: str, new_value: str, tree_item, col_index: int):
         """Update player assignment in game data and table."""
