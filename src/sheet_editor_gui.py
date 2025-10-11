@@ -11,9 +11,12 @@ from tkinter import ttk, messagebox, filedialog
 import csv
 import os
 import logging
+import pandas as pd
 from typing import List, Dict, Any
 
 from sheet_reader import SheetReader
+from games_table import GamesTable
+from player import Player, PlayerStatistics
 
 _logger = logging.getLogger("__main__")
 
@@ -31,11 +34,15 @@ class SheetEditorGUI:
         self.csv_data = []  # Raw CSV data for saving
         self.original_data = []  # Original CSV backup
         self.games_data = []  # Parsed game data from SheetReader
+        self.games_table = None  # GamesTable object for statistics
+        self.player_stats = {}  # Player statistics
+        self.overall_stats = None  # Overall statistics DataFrame
 
         # Setup GUI components
         self.setup_menu()
         self.setup_main_frame()
         self.setup_table()
+        self.setup_statistics_panel()
 
         _logger.debug("SheetEditorGUI initialized")
 
@@ -60,7 +67,7 @@ class SheetEditorGUI:
         self.root.bind('<Control-Shift-S>', lambda e: self.save_as_file())
 
     def setup_main_frame(self):
-        """Setup the main frame with toolbar."""
+        """Setup the main frame with toolbar and paned window."""
         # Main frame
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -79,23 +86,32 @@ class SheetEditorGUI:
 
         ttk.Button(button_frame, text="Open File", command=self.open_file).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(button_frame, text="Save", command=self.save_file).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(button_frame, text="Refresh", command=self.refresh_table).pack(side=tk.LEFT)
+        ttk.Button(button_frame, text="Refresh", command=self.refresh_table).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="Update Stats", command=self.update_statistics).pack(side=tk.LEFT)
+
+        # Create paned window for table and statistics
+        self.paned_window = ttk.PanedWindow(self.main_frame, orient=tk.VERTICAL)
+        self.paned_window.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+
+        # Table frame (top pane)
+        self.table_frame = ttk.Frame(self.paned_window)
+        self.paned_window.add(self.table_frame, weight=2)
+
+        # Statistics frame (bottom pane)  
+        self.stats_frame = ttk.Frame(self.paned_window)
+        self.paned_window.add(self.stats_frame, weight=1)
 
     def setup_table(self):
         """Setup the data table with scrollbars."""
-        # Create frame for table and scrollbars
-        table_frame = ttk.Frame(self.main_frame)
-        table_frame.pack(fill=tk.BOTH, expand=True)
-
-        # Create treeview with scrollbars
-        self.tree = ttk.Treeview(table_frame, show='headings')
+        # Create treeview with scrollbars in the table frame
+        self.tree = ttk.Treeview(self.table_frame, show='headings')
 
         # Vertical scrollbar
-        v_scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        v_scrollbar = ttk.Scrollbar(self.table_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=v_scrollbar.set)
 
         # Horizontal scrollbar
-        h_scrollbar = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
+        h_scrollbar = ttk.Scrollbar(self.table_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
         self.tree.configure(xscrollcommand=h_scrollbar.set)
 
         # Pack scrollbars and treeview
@@ -109,6 +125,56 @@ class SheetEditorGUI:
         # Status bar
         self.status_bar = ttk.Label(self.root, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+    def setup_statistics_panel(self):
+        """Setup the statistics panel."""
+        # Create notebook for different statistics views
+        self.stats_notebook = ttk.Notebook(self.stats_frame)
+        self.stats_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Player statistics tab
+        self.player_stats_frame = ttk.Frame(self.stats_notebook)
+        self.stats_notebook.add(self.player_stats_frame, text="Player Statistics")
+
+        # Create treeview for player statistics
+        self.player_stats_tree = ttk.Treeview(self.player_stats_frame, show='headings')
+        
+        # Setup columns for player stats
+        player_columns = ['Player', 'Games', 'Pauses', 'Min Inter-Bench', 'Avg Inter-Bench', 
+                         'Max Inter-Bench', 'Std Dev', 'Variance']
+        self.player_stats_tree['columns'] = player_columns
+        
+        for col in player_columns:
+            self.player_stats_tree.heading(col, text=col)
+            self.player_stats_tree.column(col, width=100, minwidth=80)
+
+        # Scrollbars for player stats
+        player_v_scroll = ttk.Scrollbar(self.player_stats_frame, orient=tk.VERTICAL, 
+                                       command=self.player_stats_tree.yview)
+        self.player_stats_tree.configure(yscrollcommand=player_v_scroll.set)
+
+        player_h_scroll = ttk.Scrollbar(self.player_stats_frame, orient=tk.HORIZONTAL, 
+                                       command=self.player_stats_tree.xview)
+        self.player_stats_tree.configure(xscrollcommand=player_h_scroll.set)
+
+        # Pack player stats components
+        player_v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        player_h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+        self.player_stats_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Overall statistics tab
+        self.overall_stats_frame = ttk.Frame(self.stats_notebook)
+        self.stats_notebook.add(self.overall_stats_frame, text="Overall Statistics")
+
+        # Create text widget for overall stats
+        self.overall_stats_text = tk.Text(self.overall_stats_frame, wrap=tk.WORD, height=8)
+        overall_scroll = ttk.Scrollbar(self.overall_stats_frame, orient=tk.VERTICAL, 
+                                      command=self.overall_stats_text.yview)
+        self.overall_stats_text.configure(yscrollcommand=overall_scroll.set)
+
+        # Pack overall stats components
+        overall_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.overall_stats_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     def open_file(self):
         """Open and load a CSV file."""
@@ -139,6 +205,10 @@ class SheetEditorGUI:
         try:
             sheet_reader = SheetReader(file_path)
             self.games_data = sheet_reader.read()
+            
+            # Create GamesTable for statistics
+            self.games_table = GamesTable(self.games_data)
+            
         except Exception as e:
             _logger.error("Failed to parse game data: %s", str(e))
             messagebox.showerror("Parse Error", f"Failed to parse game data: {str(e)}")
@@ -147,6 +217,7 @@ class SheetEditorGUI:
         # Update UI
         self.file_label.config(text=f"File: {os.path.basename(file_path)}")
         self.populate_table()
+        self.calculate_statistics()
         self.status_bar.config(text=f"Loaded {len(self.games_data)} games from {os.path.basename(file_path)}")
 
         _logger.info("Loaded CSV file: %s", file_path)
@@ -255,6 +326,113 @@ class SheetEditorGUI:
             self.tree.tag_configure('bench_row', background='#f5f5dc')
 
         _logger.debug("Populated table with %d games in detailed layout", len(self.games_data))
+    
+    def calculate_statistics(self):
+        """Calculate player and overall statistics."""
+        if not self.games_table:
+            return
+            
+        try:
+            # Get players list
+            players_list = self.games_table.get_players_list()
+            self.player_stats = {}
+            
+            # Calculate statistics for each player
+            for player_name in players_list:
+                player = Player(player_name)
+                stats = PlayerStatistics(player)
+                stats.analyze_benching(self.games_table)
+                self.player_stats[player_name] = stats
+            
+            # Calculate overall statistics
+            overall_stats_columns = [
+                "player", "games", "pauses", "inter_bench_min", "inter_bench_avg",
+                "inter_bench_max", "inter_bench_std", "inter_bench_var"
+            ]
+            
+            stats_data = []
+            for player_name, stats in self.player_stats.items():
+                player_stats = stats.toDict()
+                stats_data.append(player_stats)
+            
+            if stats_data:
+                self.overall_stats = pd.DataFrame(stats_data)
+                # Ensure all columns exist
+                for col in overall_stats_columns:
+                    if col not in self.overall_stats.columns:
+                        self.overall_stats[col] = 0
+            else:
+                self.overall_stats = pd.DataFrame(columns=overall_stats_columns)
+            
+            # Update statistics display
+            self.update_statistics_display()
+            
+        except Exception as e:
+            _logger.error("Failed to calculate statistics: %s", str(e))
+            messagebox.showerror("Statistics Error", f"Failed to calculate statistics: {str(e)}")
+    
+    def update_statistics(self):
+        """Update statistics when called from button."""
+        self.calculate_statistics()
+        self.status_bar.config(text="Statistics updated")
+    
+    def update_statistics_display(self):
+        """Update the statistics display in the GUI."""
+        # Clear existing player statistics
+        for item in self.player_stats_tree.get_children():
+            self.player_stats_tree.delete(item)
+        
+        # Populate player statistics
+        for player_name, stats in self.player_stats.items():
+            stats_dict = stats.toDict()
+            values = [
+                stats_dict.get('player', player_name),
+                stats_dict.get('games', 0),
+                stats_dict.get('pauses', 0),
+                stats_dict.get('inter_bench_min', '-'),
+                f"{stats_dict.get('inter_bench_avg', 0):.1f}",
+                stats_dict.get('inter_bench_max', '-'),
+                f"{stats_dict.get('inter_bench_std', 0):.2f}",
+                f"{stats_dict.get('inter_bench_var', 0):.2f}"
+            ]
+            self.player_stats_tree.insert('', 'end', values=values)
+        
+        # Update overall statistics text
+        self.overall_stats_text.delete('1.0', tk.END)
+        
+        if self.overall_stats is not None and not self.overall_stats.empty:
+            # Calculate overall metrics
+            played_games_std = self.overall_stats['games'].std()
+            max_games_diff = self.overall_stats['games'].max() - self.overall_stats['games'].min()
+            inter_bench_avg_std = self.overall_stats['inter_bench_avg'].std() if 'inter_bench_avg' in self.overall_stats.columns else 0
+            
+            # Format statistics text
+            stats_text = f"Overall Statistics for {os.path.basename(self.current_file) if self.current_file else 'current file'}:\n\n"
+            stats_text += f"Played games standard deviation: {played_games_std:.2f}\n"
+            stats_text += f"  Difference between max and min played games: {max_games_diff}\n"
+            stats_text += f"Inter-bench average standard deviation: {inter_bench_avg_std:.2f}\n"
+            
+            if 'inter_bench_min' in self.overall_stats.columns and 'inter_bench_max' in self.overall_stats.columns:
+                min_inter_bench = self.overall_stats['inter_bench_min'].min()
+                max_inter_bench = self.overall_stats['inter_bench_max'].max()
+                stats_text += f"  Inter-bench range: {min_inter_bench} - {max_inter_bench}\n"
+                
+                # Check for warnings
+                if max_games_diff > 1:
+                    stats_text += f"\n⚠️  WARNING: Max-min game difference > 1 ({max_games_diff})\n"
+                
+                if min_inter_bench == 0:
+                    benched_twice_players = self.overall_stats[self.overall_stats['inter_bench_min'] == 0]['player'].tolist()
+                    stats_text += f"\n⚠️  WARNING: Players benched twice in a row: {', '.join(benched_twice_players)}\n"
+                
+                # Players with lowest inter-bench time
+                if min_inter_bench != max_inter_bench:
+                    quick_benched = self.overall_stats[self.overall_stats['inter_bench_min'] == min_inter_bench]['player'].tolist()
+                    stats_text += f"\nPlayers with lowest inter-bench time: {', '.join(quick_benched)}\n"
+            
+            self.overall_stats_text.insert('1.0', stats_text)
+        else:
+            self.overall_stats_text.insert('1.0', "No statistics available. Please load a CSV file first.")
     
     def on_item_double_click(self, event):
         """Handle double-click on table item for editing."""
@@ -464,6 +642,9 @@ class SheetEditorGUI:
 
             # Update CSV data for saving
             self.update_csv_from_games()
+            
+            # Refresh statistics after player changes
+            self.calculate_statistics()
 
             self.status_bar.config(text=f"Updated {row_type} to '{new_value}'")
             _logger.debug("Updated %s to '%s' in game %d", row_type, new_value, game_idx)
