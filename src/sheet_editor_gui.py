@@ -37,6 +37,11 @@ class SheetEditorGUI:
         self.games_table = None  # GamesTable object for statistics
         self.player_stats = {}  # Player statistics
         self.overall_stats = None  # Overall statistics DataFrame
+        
+        # Cell selection tracking
+        self.selected_item = None
+        self.selected_column = None
+        self.selected_col_index = None
 
         # Setup GUI components
         self.setup_menu()
@@ -97,7 +102,7 @@ class SheetEditorGUI:
         self.table_frame = ttk.Frame(self.paned_window)
         self.paned_window.add(self.table_frame, weight=2)
 
-        # Statistics frame (bottom pane)  
+        # Statistics frame (bottom pane)
         self.stats_frame = ttk.Frame(self.paned_window)
         self.paned_window.add(self.stats_frame, weight=1)
 
@@ -119,7 +124,8 @@ class SheetEditorGUI:
         h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Bind double-click for editing
+        # Bind events for cell selection and editing
+        self.tree.bind('<Button-1>', self.on_cell_click)
         self.tree.bind('<Double-1>', self.on_item_double_click)
 
         # Status bar
@@ -138,22 +144,22 @@ class SheetEditorGUI:
 
         # Create treeview for player statistics
         self.player_stats_tree = ttk.Treeview(self.player_stats_frame, show='headings')
-        
+
         # Setup columns for player stats
-        player_columns = ['Player', 'Games', 'Pauses', 'Min Inter-Bench', 'Avg Inter-Bench', 
+        player_columns = ['Player', 'Games', 'Pauses', 'Min Inter-Bench', 'Avg Inter-Bench',
                          'Max Inter-Bench', 'Std Dev', 'Variance']
         self.player_stats_tree['columns'] = player_columns
-        
+
         for col in player_columns:
             self.player_stats_tree.heading(col, text=col)
             self.player_stats_tree.column(col, width=100, minwidth=80)
 
         # Scrollbars for player stats
-        player_v_scroll = ttk.Scrollbar(self.player_stats_frame, orient=tk.VERTICAL, 
+        player_v_scroll = ttk.Scrollbar(self.player_stats_frame, orient=tk.VERTICAL,
                                        command=self.player_stats_tree.yview)
         self.player_stats_tree.configure(yscrollcommand=player_v_scroll.set)
 
-        player_h_scroll = ttk.Scrollbar(self.player_stats_frame, orient=tk.HORIZONTAL, 
+        player_h_scroll = ttk.Scrollbar(self.player_stats_frame, orient=tk.HORIZONTAL,
                                        command=self.player_stats_tree.xview)
         self.player_stats_tree.configure(xscrollcommand=player_h_scroll.set)
 
@@ -168,7 +174,7 @@ class SheetEditorGUI:
 
         # Create text widget for overall stats
         self.overall_stats_text = tk.Text(self.overall_stats_frame, wrap=tk.WORD, height=8)
-        overall_scroll = ttk.Scrollbar(self.overall_stats_frame, orient=tk.VERTICAL, 
+        overall_scroll = ttk.Scrollbar(self.overall_stats_frame, orient=tk.VERTICAL,
                                       command=self.overall_stats_text.yview)
         self.overall_stats_text.configure(yscrollcommand=overall_scroll.set)
 
@@ -205,10 +211,10 @@ class SheetEditorGUI:
         try:
             sheet_reader = SheetReader(file_path)
             self.games_data = sheet_reader.read()
-            
+
             # Create GamesTable for statistics
             self.games_table = GamesTable(self.games_data)
-            
+
         except Exception as e:
             _logger.error("Failed to parse game data: %s", str(e))
             messagebox.showerror("Parse Error", f"Failed to parse game data: {str(e)}")
@@ -227,19 +233,24 @@ class SheetEditorGUI:
         if not self.games_data:
             return
 
+        # Clear current cell selection
+        self.clear_cell_selection()
+
         # Clear existing data
         for item in self.tree.get_children():
             self.tree.delete(item)
 
         # Create dynamic columns based on number of games
         num_games = len(self.games_data)
-        columns = ['Court_Team'] + [f'Game_{i+1}' for i in range(num_games)]
+        columns = ['Court', 'Team'] + [f'Game_{i+1}' for i in range(num_games)]
         self.tree['columns'] = columns
 
         # Configure column headings and widths
-        self.tree.heading('Court_Team', text='Court/Team')
-        self.tree.column('Court_Team', width=120, minwidth=100)
-        
+        self.tree.heading('Court', text='Court')
+        self.tree.column('Court', width=100, minwidth=80)
+        self.tree.heading('Team', text='Team')
+        self.tree.column('Team', width=80, minwidth=60)
+
         for i in range(num_games):
             game_name = self.games_data[i].get('Game', f'p{i+1}')
             self.tree.heading(f'Game_{i+1}', text=game_name)
@@ -250,19 +261,13 @@ class SheetEditorGUI:
         for game in self.games_data:
             courts = [key for key in game.keys() if key not in ['Game', 'Bench']]
             all_courts.update(courts)
-        
+
         all_courts = sorted(list(all_courts))
 
-        # Insert court data
+        # Insert court data with court name in first column
         for court_name in all_courts:
-            # Insert court header
-            court_header_data = [f"=== {court_name} ==="] + [''] * num_games
-            court_item = self.tree.insert('', 'end', values=court_header_data, 
-                                        tags=('court_header',))
-            self.tree.tag_configure('court_header', background='#e0e0e0', font=('Arial', 10, 'bold'))
-            
             # Team 1 row
-            team1_data = ['Team 1']
+            team1_data = [court_name, 'Team 1']
             for game in self.games_data:
                 if court_name in game:
                     team1 = game[court_name].get('Team1', [])
@@ -270,19 +275,19 @@ class SheetEditorGUI:
                 else:
                     team1_str = ''
                 team1_data.append(team1_str)
-            
-            team1_item = self.tree.insert('', 'end', values=team1_data, 
+
+            team1_item = self.tree.insert('', 'end', values=team1_data,
                                         tags=('team1', court_name))
             self.tree.tag_configure('team1', background='#f0f8ff')
-            
+
             # VS row
-            vs_data = ['   vs'] + ['vs'] * num_games
-            vs_item = self.tree.insert('', 'end', values=vs_data, 
+            vs_data = ['', 'vs'] + ['vs'] * num_games
+            vs_item = self.tree.insert('', 'end', values=vs_data,
                                      tags=('vs_row',))
             self.tree.tag_configure('vs_row', background='#fffacd', font=('Arial', 8, 'italic'))
-            
-            # Team 2 row  
-            team2_data = ['Team 2']
+
+            # Team 2 row
+            team2_data = ['', 'Team 2']
             for game in self.games_data:
                 if court_name in game:
                     team2 = game[court_name].get('Team2', [])
@@ -290,71 +295,71 @@ class SheetEditorGUI:
                 else:
                     team2_str = ''
                 team2_data.append(team2_str)
-            
-            team2_item = self.tree.insert('', 'end', values=team2_data, 
+
+            team2_item = self.tree.insert('', 'end', values=team2_data,
                                         tags=('team2', court_name))
             self.tree.tag_configure('team2', background='#ffe4e1')
-            
+
             # Separator
-            sep_data = [''] + [''] * num_games
+            sep_data = ['', ''] + [''] * num_games
             self.tree.insert('', 'end', values=sep_data, tags=('separator',))
 
         # Bench section
-        bench_header_data = ['=== BENCH ==='] + [''] * num_games
-        bench_header_item = self.tree.insert('', 'end', values=bench_header_data, 
+        bench_header_data = ['BENCH', ''] + [''] * num_games
+        bench_header_item = self.tree.insert('', 'end', values=bench_header_data,
                                            tags=('bench_header',))
         self.tree.tag_configure('bench_header', background='#ffeb9c', font=('Arial', 10, 'bold'))
-        
+
         # Find maximum bench players across all games
         max_bench = 0
         for game in self.games_data:
             bench_size = len(game.get('Bench', []))
             max_bench = max(max_bench, bench_size)
-        
+
         # Create rows for each bench position
         for bench_pos in range(max_bench):
-            bench_data = [f'Bench {bench_pos + 1}']
+            bench_data = ['', f'Bench {bench_pos + 1}']
             for game in self.games_data:
                 bench_players = game.get('Bench', [])
                 if bench_pos < len(bench_players):
                     bench_data.append(str(bench_players[bench_pos]))
                 else:
                     bench_data.append('')
-            
-            bench_item = self.tree.insert('', 'end', values=bench_data, 
+
+            bench_item = self.tree.insert('', 'end', values=bench_data,
                                         tags=('bench_row',))
             self.tree.tag_configure('bench_row', background='#f5f5dc')
 
         _logger.debug("Populated table with %d games in detailed layout", len(self.games_data))
-    
+
     def calculate_statistics(self):
         """Calculate player and overall statistics."""
         if not self.games_table:
             return
-            
+
         try:
             # Get players list
             players_list = self.games_table.get_players_list()
             self.player_stats = {}
-            
+
             # Calculate statistics for each player
             for player_name in players_list:
                 player = Player(player_name)
                 stats = PlayerStatistics(player)
                 stats.analyze_benching(self.games_table)
                 self.player_stats[player_name] = stats
-            
+
             # Calculate overall statistics
             overall_stats_columns = [
                 "player", "games", "pauses", "inter_bench_min", "inter_bench_avg",
                 "inter_bench_max", "inter_bench_std", "inter_bench_var"
             ]
-            
+
             stats_data = []
             for player_name, stats in self.player_stats.items():
                 player_stats = stats.toDict()
                 stats_data.append(player_stats)
-            
+
             if stats_data:
                 self.overall_stats = pd.DataFrame(stats_data)
                 # Ensure all columns exist
@@ -363,25 +368,25 @@ class SheetEditorGUI:
                         self.overall_stats[col] = 0
             else:
                 self.overall_stats = pd.DataFrame(columns=overall_stats_columns)
-            
+
             # Update statistics display
             self.update_statistics_display()
-            
+
         except Exception as e:
             _logger.error("Failed to calculate statistics: %s", str(e))
             messagebox.showerror("Statistics Error", f"Failed to calculate statistics: {str(e)}")
-    
+
     def update_statistics(self):
         """Update statistics when called from button."""
         self.calculate_statistics()
         self.status_bar.config(text="Statistics updated")
-    
+
     def update_statistics_display(self):
         """Update the statistics display in the GUI."""
         # Clear existing player statistics
         for item in self.player_stats_tree.get_children():
             self.player_stats_tree.delete(item)
-        
+
         # Populate player statistics
         for player_name, stats in self.player_stats.items():
             stats_dict = stats.toDict()
@@ -396,81 +401,150 @@ class SheetEditorGUI:
                 f"{stats_dict.get('inter_bench_var', 0):.2f}"
             ]
             self.player_stats_tree.insert('', 'end', values=values)
-        
+
         # Update overall statistics text
         self.overall_stats_text.delete('1.0', tk.END)
-        
+
         if self.overall_stats is not None and not self.overall_stats.empty:
             # Calculate overall metrics
             played_games_std = self.overall_stats['games'].std()
             max_games_diff = self.overall_stats['games'].max() - self.overall_stats['games'].min()
             inter_bench_avg_std = self.overall_stats['inter_bench_avg'].std() if 'inter_bench_avg' in self.overall_stats.columns else 0
-            
+
             # Format statistics text
             stats_text = f"Overall Statistics for {os.path.basename(self.current_file) if self.current_file else 'current file'}:\n\n"
             stats_text += f"Played games standard deviation: {played_games_std:.2f}\n"
             stats_text += f"  Difference between max and min played games: {max_games_diff}\n"
             stats_text += f"Inter-bench average standard deviation: {inter_bench_avg_std:.2f}\n"
-            
+
             if 'inter_bench_min' in self.overall_stats.columns and 'inter_bench_max' in self.overall_stats.columns:
                 min_inter_bench = self.overall_stats['inter_bench_min'].min()
                 max_inter_bench = self.overall_stats['inter_bench_max'].max()
                 stats_text += f"  Inter-bench range: {min_inter_bench} - {max_inter_bench}\n"
-                
+
                 # Check for warnings
                 if max_games_diff > 1:
                     stats_text += f"\n⚠️  WARNING: Max-min game difference > 1 ({max_games_diff})\n"
-                
+
                 if min_inter_bench == 0:
                     benched_twice_players = self.overall_stats[self.overall_stats['inter_bench_min'] == 0]['player'].tolist()
                     stats_text += f"\n⚠️  WARNING: Players benched twice in a row: {', '.join(benched_twice_players)}\n"
-                
+
                 # Players with lowest inter-bench time
                 if min_inter_bench != max_inter_bench:
                     quick_benched = self.overall_stats[self.overall_stats['inter_bench_min'] == min_inter_bench]['player'].tolist()
                     stats_text += f"\nPlayers with lowest inter-bench time: {', '.join(quick_benched)}\n"
-            
+
             self.overall_stats_text.insert('1.0', stats_text)
         else:
             self.overall_stats_text.insert('1.0', "No statistics available. Please load a CSV file first.")
-    
+
+    def on_cell_click(self, event):
+        """Handle single click to select individual cells."""
+        item = self.tree.identify_row(event.y)
+        column = self.tree.identify_column(event.x)
+        
+        if item and column:
+            col_index = int(column.replace('#', '')) - 1
+            tags = list(self.tree.item(item, 'tags'))
+            
+            # Check if this is an editable cell
+            is_editable = False
+            if tags and tags[0] in ['team1', 'team2', 'bench_row']:
+                if col_index > 1:  # Game columns
+                    is_editable = True
+                elif tags[0] in ['team1', 'team2'] and col_index == 1:  # Team label column
+                    is_editable = True
+            
+            if is_editable:
+                # Clear previous selection highlighting
+                self.clear_cell_selection()
+                
+                # Store selection info
+                self.selected_item = item
+                self.selected_column = column
+                self.selected_col_index = col_index
+                
+                # Use default Treeview selection (dark grey)
+                self.tree.selection_set(item)
+                self.tree.focus(item)
+                
+                # Update status bar to show selected cell
+                col_name = self.tree.heading(column, 'text') or f"Column {col_index + 1}"
+                row_values = self.tree.item(item, 'values')
+                row_identifier = row_values[0] if row_values else "Row"
+                if len(row_values) > 1 and row_values[1]:  # Team row with team info
+                    row_identifier = f"{row_values[0]} - {row_values[1]}"
+                elif row_values and row_values[0]:  # Court header or bench
+                    row_identifier = row_values[0]
+                
+                self.status_bar.config(text=f"Selected: {col_name} in {row_identifier} (click elsewhere to deselect)")
+                
+                _logger.debug("Selected cell: item=%s, column=%s, col_index=%d", item, column, col_index)
+            else:
+                # Clear selection if clicking non-editable cell
+                self.clear_cell_selection()
+
+    def clear_cell_selection(self):
+        """Clear the current cell selection."""
+        if hasattr(self, 'selected_item') and self.selected_item:
+            # Clear tree selection
+            self.tree.selection_remove(self.selected_item)
+            
+        self.selected_item = None
+        self.selected_column = None
+        self.selected_col_index = None
+        
+        # Reset status bar
+        self.status_bar.config(text="Ready")
+
     def on_item_double_click(self, event):
         """Handle double-click on table item for editing."""
-        if not self.tree.selection():
-            return
-            
-        item = self.tree.selection()[0]
+        item = self.tree.identify_row(event.y)
         column = self.tree.identify_column(event.x)
+        
+        if not item or not column:
+            return
 
-        if column:
-            col_index = int(column.replace('#', '')) - 1
-            
-            # Get item tags to determine what type of row this is
-            tags = self.tree.item(item)['tags']
-            if not tags:
+        col_index = int(column.replace('#', '')) - 1
+
+        # Get item tags to determine what type of row this is
+        tags = self.tree.item(item)['tags']
+        if not tags:
+            return
+
+        row_type = tags[0]
+
+        # Only allow editing team and bench rows
+        if row_type in ['team1', 'team2', 'bench_row']:
+            # For team rows, allow editing Team column (index 1) and game columns (index >= 2)
+            # For bench rows, only allow editing game columns (index >= 2)
+            if row_type in ['team1', 'team2'] and col_index == 1:
+                # Editing the Team column - allow changing the entire team for all games
+                self.edit_team_all_games(row_type, tags[1] if len(tags) > 1 else None, item)
                 return
-                
-            row_type = tags[0]
-            
-            # Only allow editing team and bench rows
-            if row_type in ['team1', 'team2', 'bench_row']:
-                if col_index == 0:  # Don't edit the first column (labels)
-                    return
-                    
-                current_value = self.tree.item(item)['values'][col_index] if col_index < len(self.tree.item(item)['values']) else ''
-                
-                # Determine game index from column
-                game_idx = col_index - 1  # Subtract 1 because first column is labels
-                if game_idx >= len(self.games_data):
-                    return
-                
-                # Get court name if it's a team row
-                court_name = None
-                if len(tags) > 1 and row_type in ['team1', 'team2']:
-                    court_name = tags[1]
-                
-                # Create edit dialog
-                self.edit_player_cell_new_layout(game_idx, court_name, row_type, current_value, item, col_index)
+            elif col_index <= 1:  # Don't edit Court column (index 0) or Team column for bench
+                return
+
+            current_value = self.tree.item(item)['values'][col_index] if col_index < len(self.tree.item(item)['values']) else ''
+
+            # Debug logging
+            _logger.debug("Double-click: row_type=%s, col_index=%d, current_value='%s'", row_type, col_index, current_value)
+
+            # Determine game index from column (subtract 2 for Court and Team columns)
+            game_idx = col_index - 2
+            if game_idx >= len(self.games_data):
+                return
+
+            # Get court name if it's a team row
+            court_name = None
+            if len(tags) > 1 and row_type in ['team1', 'team2']:
+                court_name = tags[1]
+
+            _logger.debug("Editing game_idx=%d, court_name=%s", game_idx, court_name)
+
+            # Create edit dialog
+            self.edit_player_cell_new_layout(game_idx, court_name, row_type, current_value, item, col_index)
 
     def edit_player_cell_new_layout(self, game_idx: int, court_name: str | None, row_type: str, current_value: str, tree_item, col_index: int):
         """Open dialog to edit player assignment in new layout."""
@@ -478,7 +552,6 @@ class SheetEditorGUI:
         dialog.title("Edit Player Assignment")
         dialog.geometry("350x250")
         dialog.transient(self.root)
-        dialog.grab_set()
 
         # Center dialog
         dialog.update_idletasks()
@@ -489,10 +562,10 @@ class SheetEditorGUI:
         # Display info
         game_name = self.games_data[game_idx].get('Game', f'Game {game_idx + 1}')
         ttk.Label(dialog, text=f"Game: {game_name}").pack(pady=5)
-        
+
         if court_name:
             ttk.Label(dialog, text=f"Court: {court_name}").pack(pady=5)
-        
+
         if row_type == 'team1':
             ttk.Label(dialog, text="Position: Team 1").pack(pady=5)
             ttk.Label(dialog, text="Enter players separated by commas (e.g., 1,2):").pack(pady=5)
@@ -503,9 +576,14 @@ class SheetEditorGUI:
             ttk.Label(dialog, text="Position: Bench").pack(pady=5)
             ttk.Label(dialog, text="Enter bench player number:").pack(pady=5)
 
+        # Create entry with current value, ensuring it's not None
         entry = ttk.Entry(dialog, width=30)
         entry.pack(pady=10)
-        entry.insert(0, current_value)
+        
+        # Insert current value, handling None or empty cases
+        if current_value:
+            entry.insert(0, str(current_value))
+        
         entry.focus()
         entry.select_range(0, tk.END)
 
@@ -526,7 +604,97 @@ class SheetEditorGUI:
         # Bind Enter and Escape keys
         dialog.bind('<Return>', lambda e: save_value())
         dialog.bind('<Escape>', lambda e: cancel())
+
+        # Set grab AFTER all widgets are created and dialog is visible
+        dialog.after_idle(dialog.grab_set)
     
+    def edit_team_all_games(self, row_type: str, court_name: str | None, tree_item):
+        """Open dialog to edit team assignment for all games in this court."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Edit Team for All Games")
+        dialog.geometry("400x300")
+        dialog.transient(self.root)
+
+        # Center dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        team_name = "Team 1" if row_type == 'team1' else "Team 2"
+        ttk.Label(dialog, text=f"Edit {team_name} for Court: {court_name or 'Unknown'}", 
+                 font=("Arial", 12, "bold")).pack(pady=10)
+        
+        ttk.Label(dialog, text="Enter player pairs for each game:", font=("Arial", 10)).pack(pady=5)
+        ttk.Label(dialog, text="Format: game1_player1,game1_player2;game2_player1,game2_player2;...", 
+                 font=("Arial", 8), wraplength=350).pack(pady=5)
+        
+        # Get current team assignments for all games
+        current_assignments = []
+        for game in self.games_data:
+            if court_name and court_name in game:
+                team_key = 'Team1' if row_type == 'team1' else 'Team2'
+                team_players = game[court_name].get(team_key, [])
+                assignment = ','.join(str(p) for p in team_players if p)
+            else:
+                assignment = ''
+            current_assignments.append(assignment)
+        
+        # Create a text widget for easier editing
+        text_frame = ttk.Frame(dialog)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        text_widget = tk.Text(text_frame, height=8, width=45, wrap=tk.WORD)
+        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=text_widget.yview)
+        text_widget.configure(yscrollcommand=scrollbar.set)
+        
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Fill text widget with current assignments
+        current_text = ';'.join(current_assignments)
+        text_widget.insert('1.0', current_text)
+        text_widget.focus()
+
+        def save_values():
+            new_text = text_widget.get('1.0', tk.END).strip()
+            new_assignments = new_text.split(';') if new_text else []
+            
+            # Pad with empty strings if not enough assignments
+            while len(new_assignments) < len(self.games_data):
+                new_assignments.append('')
+            
+            # Update each game
+            for game_idx, assignment in enumerate(new_assignments[:len(self.games_data)]):
+                if court_name and court_name in self.games_data[game_idx]:
+                    team_key = 'Team1' if row_type == 'team1' else 'Team2'
+                    if assignment.strip():
+                        players = [p.strip() for p in assignment.split(',') if p.strip()]
+                        self.games_data[game_idx][court_name][team_key] = players
+                    else:
+                        self.games_data[game_idx][court_name][team_key] = []
+            
+            # Refresh the entire table to show all changes
+            self.populate_table()
+            self.calculate_statistics()
+            self.status_bar.config(text=f"Updated {team_name} for all games in {court_name}")
+            dialog.destroy()
+
+        def cancel():
+            dialog.destroy()
+
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=10)
+
+        ttk.Button(button_frame, text="Save All", command=save_values).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=cancel).pack(side=tk.LEFT, padx=5)
+
+        # Bind Escape key
+        dialog.bind('<Escape>', lambda e: cancel())
+
+        # Set grab AFTER all widgets are created and dialog is visible
+        dialog.after_idle(dialog.grab_set)
+
     def edit_player_cell(self, game_tag: str, court_tag: str, column_name: str, current_value: str, tree_item, col_index: int):
         """Open dialog to edit player assignment."""
         dialog = tk.Toplevel(self.root)
@@ -591,41 +759,41 @@ class SheetEditorGUI:
             if row_type == 'bench_row':
                 # Handle bench players - find which bench position this is
                 bench_players = game.get('Bench', [])
-                
+
                 # Get the row label to determine bench position
                 current_values = list(self.tree.item(tree_item)['values'])
                 row_label = current_values[0] if current_values else ''
-                
+
                 if 'Bench' in row_label:
                     # Extract bench position number
                     try:
                         bench_pos = int(row_label.split()[-1]) - 1  # Convert to 0-based index
                     except (ValueError, IndexError):
                         bench_pos = 0
-                    
+
                     # Ensure bench list is long enough
                     while len(bench_players) <= bench_pos:
                         bench_players.append('')
-                    
+
                     if new_value.strip():
                         bench_players[bench_pos] = new_value.strip()
                     else:
                         bench_players[bench_pos] = ''
-                    
+
                     # Remove empty entries from the end
                     while bench_players and bench_players[-1] == '':
                         bench_players.pop()
-                    
+
                     game['Bench'] = bench_players
 
             elif row_type in ['team1', 'team2'] and court_name:
                 # Handle team assignments
                 if court_name not in game:
                     game[court_name] = {'Team1': [], 'Team2': []}
-                
+
                 court_data = game[court_name]
                 team_key = 'Team1' if row_type == 'team1' else 'Team2'
-                
+
                 if new_value.strip():
                     # Parse comma-separated players
                     players = [p.strip() for p in new_value.split(',') if p.strip()]
@@ -640,13 +808,16 @@ class SheetEditorGUI:
             current_values[col_index] = new_value
             self.tree.item(tree_item, values=current_values)
 
+            # Also refresh the entire table to ensure consistency
+            self.populate_table()
+
             # Update CSV data for saving
             self.update_csv_from_games()
-            
+
             # Refresh statistics after player changes
             self.calculate_statistics()
 
-            self.status_bar.config(text=f"Updated {row_type} to '{new_value}'")
+            self.status_bar.config(text=f"Updated {row_type} in Game {game_idx + 1} to '{new_value}'")
             _logger.debug("Updated %s to '%s' in game %d", row_type, new_value, game_idx)
 
         except Exception as e:
@@ -676,7 +847,7 @@ class SheetEditorGUI:
                     return
 
                 court_data = game[court_name]
-                
+
                 if column_name == 'Team1_P1':
                     if 'Team1' not in court_data:
                         court_data['Team1'] = []

@@ -5,4 +5,4 @@
 cd "$(dirname "$0")" || exit 1
 
 # Activate the virtual environment and run the application
-./.venv/bin/python sheet_editor.py
+./.venv/bin/python src/sheet_editor.py
