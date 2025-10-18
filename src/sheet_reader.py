@@ -11,6 +11,14 @@ class SheetReader:
         self._logger.debug("New %s object created", self.__class__.__name__)
         self._csv_file = filename
 
+    def name_with_number(self, name: str) -> int:
+        """Convert player name to integer for sorting purposes."""
+        # TODO Convert this method to create a string will convert number parts properly
+        # Parse string to find number parts and convert number part by a 3-digit format
+        # Ex: "Player 1" -> "Player 001", "Player-12" -> "Player-012", "p101" -> "p101"
+
+        return int(name)
+
     def read(self) -> list:
         game_table = []
         with open(self._csv_file, newline="", encoding="utf-8") as csv_file:
@@ -66,8 +74,11 @@ class SheetReader:
                         if len(game_table[i][court_name]["Team1"]) == 1:
                             p = row[i]
                             game_table[i][court_name]["Team1"] += [p]
+                            game_table[i][court_name]["Team1"].sort(key=self.name_with_number)
                         elif len(game_table[i][court_name]["Team2"]) < 2:
                             game_table[i][court_name]["Team2"] += [row[i]]
+                            if len(game_table[i][court_name]["Team2"]) == 2:
+                               game_table[i][court_name]["Team2"].sort(key=self.name_with_number)
                         else:
                             self._logger.error(
                                 "Too many players in game %s on court %s",
