@@ -333,11 +333,14 @@ class SheetEditorGUI:
         _logger.debug("Populated table with %d games in detailed layout", len(self.games_data))
 
     def calculate_statistics(self):
-        """Calculate player and overall statistics."""
-        if not self.games_table:
+        """Calculate player and overall statistics from the current in-memory games_data."""
+        if not self.games_data:
             return
 
         try:
+            # Rebuild GamesTable so edits made to games_data are picked up and re-validated
+            self.games_table = GamesTable(self.games_data)
+
             # Get players list
             players_list = self.games_table.get_players_list()
             self.player_stats = {}
@@ -891,11 +894,36 @@ class SheetEditorGUI:
             messagebox.showerror("Error", f"Failed to update player assignment: {str(e)}")
 
     def update_csv_from_games(self):
-        """Update the CSV data structure from the parsed games data."""
-        # This is a simplified approach - we need to reconstruct the CSV format
-        # For now, we'll just mark that changes were made
-        # TODO: Implement proper CSV reconstruction from games data
-        pass
+        """Rebuild self.csv_data from self.games_data, matching the format read by SheetReader."""
+        if not self.games_data:
+            return
+
+        num_games = len(self.games_data)
+        game_tags = [game.get('Game', '') for game in self.games_data]
+        rows = [game_tags]
+
+        # Court names are every key except 'Game' and 'Bench', in insertion order
+        court_names = [key for key in self.games_data[0].keys() if key not in ('Game', 'Bench')]
+
+        for court_name in court_names:
+            rows.append([court_name] + [''] * (num_games - 1))
+            for team_key in ('Team1', 'Team2'):
+                for player_idx in range(2):
+                    row = []
+                    for game in self.games_data:
+                        team = game.get(court_name, {}).get(team_key, [])
+                        row.append(team[player_idx] if player_idx < len(team) else '')
+                    rows.append(row)
+
+        max_bench = max((len(game.get('Bench', [])) for game in self.games_data), default=0)
+        if max_bench > 0:
+            rows.append(['Pause'] + [''] * (num_games - 1))
+            for bench_idx in range(max_bench):
+                row = [game.get('Bench', [])[bench_idx] if bench_idx < len(game.get('Bench', [])) else ''
+                       for game in self.games_data]
+                rows.append(row)
+
+        self.csv_data = rows
 
     def save_file(self):
         """Save current data to file."""
