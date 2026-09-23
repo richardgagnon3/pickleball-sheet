@@ -9,7 +9,7 @@ class GamesTable:
         self._validate_table()
 
     def _validate_table(self):
-        valid_games = True
+        errors = []
         g1_players = self.get_players_list()
         for game in self._game_table:
             players = []
@@ -21,11 +21,9 @@ class GamesTable:
                     continue
                 else:
                     if len(game[court]['Team1']) != 2:
-                        self._logger.error(f"Bad number of players in Team 1 for Game {game['Game']} in {court}: {len(game[court]['Team1'])}")
-                        valid_games = False
+                        errors.append(f"Bad number of players in Team 1 for Game {game['Game']} in {court}: {len(game[court]['Team1'])}")
                     if len(game[court]['Team2']) != 2:
-                        self._logger.error(f"Bad number of players in Team 2 for Game {game['Game']} in {court}: {len(game[court]['Team2'])}")
-                        valid_games = False
+                        errors.append(f"Bad number of players in Team 2 for Game {game['Game']} in {court}: {len(game[court]['Team2'])}")
                     players += game[court]['Team1']
                     players += game[court]['Team2']
             # Remove possible duplicate players
@@ -40,22 +38,21 @@ class GamesTable:
                     player = players.pop()
                     if player in players:
                         dup_players.append(player)
-                self._logger.error(f"Duplicate players {dup_players} in Game {game['Game']}, missing {missing_players}")
-                valid_games = False
+                errors.append(f"Duplicate players {dup_players} in Game {game['Game']}, missing {missing_players}")
                 continue
             # Check if new player appear in the game
             for player in players:
                 if player not in g1_players:
-                    self._logger.error(f"Player {player} is new in game {game['Game']} - must be in all games")
-                    valid_games = False
+                    errors.append(f"Player {player} is new in game {game['Game']} - must be in all games")
             # Check if all players are in the game
             for player in g1_players:
                 if player not in players:
-                    self._logger.error(f"Player {player} is missing in game {game['Game']} - must be in all games")
-                    valid_games = False
-                    
-        if not valid_games:
-            raise Exception("Something wrong in games table")
+                    errors.append(f"Player {player} is missing in game {game['Game']} - must be in all games")
+
+        if errors:
+            for error in errors:
+                self._logger.error(error)
+            raise Exception("Invalid games table:\n" + "\n".join(errors))
 
     def get_games_list(self) -> list:
         """Returns the list of games contains into the game table.

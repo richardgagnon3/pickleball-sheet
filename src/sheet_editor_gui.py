@@ -41,6 +41,9 @@ class SheetEditorGUI:
         # Cell selection tracking (up to 2 cells selected for swapping)
         self.selected_cells = []
 
+        # Overlay labels marking player cells that break table validation
+        self.invalid_overlays = []
+
         # Setup GUI components
         self.setup_menu()
         self.setup_main_frame()
@@ -111,15 +114,15 @@ class SheetEditorGUI:
         self.tree = ttk.Treeview(self.table_frame, show='headings')
 
         # Vertical scrollbar
-        v_scrollbar = ttk.Scrollbar(self.table_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=v_scrollbar.set)
+        self.v_scrollbar = ttk.Scrollbar(self.table_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=self._on_tree_yscroll)
 
         # Horizontal scrollbar
         h_scrollbar = ttk.Scrollbar(self.table_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
         self.tree.configure(xscrollcommand=h_scrollbar.set)
 
         # Pack scrollbars and treeview
-        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -232,8 +235,9 @@ class SheetEditorGUI:
         if not self.games_data:
             return
 
-        # Clear current cell selection
+        # Clear current cell selection and invalid-cell overlays (rows are about to be recreated)
         self.clear_cell_selection()
+        self._clear_invalid_overlays()
 
         # Clear existing data
         for item in self.tree.get_children():
@@ -319,6 +323,9 @@ class SheetEditorGUI:
 
         _logger.debug("Populated table with %d games in detailed layout", len(self.games_data))
 
+        # Highlight any player cells that currently break table validation
+        self.refresh_invalid_cell_highlights()
+
     def calculate_statistics(self):
         """Calculate player and overall statistics from the current in-memory games_data."""
         if not self.games_data:
@@ -363,8 +370,9 @@ class SheetEditorGUI:
             self.update_statistics_display()
 
         except Exception as e:
-            _logger.error("Failed to calculate statistics: %s", str(e))
-            messagebox.showerror("Statistics Error", f"Failed to calculate statistics: {str(e)}")
+            # Invalid game data (e.g. a duplicate player introduced by a swap) is allowed to
+            # persist so the user can keep swapping; just log it instead of blocking with a dialog.
+            _logger.warning("Skipped statistics update, invalid game data: %s", str(e))
 
     def update_statistics(self):
         """Update statistics when called from button."""
@@ -433,7 +441,10 @@ class SheetEditorGUI:
         """Handle single click to select up to 2 individual player cells for swapping."""
         item = self.tree.identify_row(event.y)
         column = self.tree.identify_column(event.x)
+        return self._handle_cell_selection(item, column)
 
+    def _handle_cell_selection(self, item, column):
+        """Select or deselect a player cell (identified by tree item and column) for swapping."""
         if not item or not column:
             return "break"
 
@@ -511,11 +522,13 @@ class SheetEditorGUI:
         value = self.tree.set(cell_info['item'], cell_info['column'])
         cell_info['original_display'] = value
         self.tree.set(cell_info['item'], cell_info['column'], f"[{value}]")
+        self._sync_overlay_text(cell_info['item'], cell_info['column'])
 
     def _unmark_cell(self, cell_info: dict) -> None:
         """Restore a cell's displayed value after it is deselected."""
         if self.tree.exists(cell_info['item']) and 'original_display' in cell_info:
             self.tree.set(cell_info['item'], cell_info['column'], cell_info['original_display'])
+            self._sync_overlay_text(cell_info['item'], cell_info['column'])
 
     def _get_player_list(self, cell_info: dict) -> list:
         """Return the mutable player list referenced by a selected cell, padded to its index."""
@@ -540,8 +553,117 @@ class SheetEditorGUI:
         """Set the player value for a selected cell in the underlying game data."""
         self._get_player_list(cell_info)[cell_info['player_idx']] = value
 
+    def _on_tree_yscroll(self, first, last) -> None:
+        """Forward vertical scroll to the scrollbar and keep invalid-cell overlays aligned."""
+        self.v_scrollbar.set(first, last)
+        self._reposition_invalid_overlays()
+
+    def _clear_invalid_overlays(self) -> None:
+        """Remove all red overlay labels marking invalid player cells."""
+        for overlay in self.invalid_overlays:
+            overlay['label'].destroy()
+        self.invalid_overlays = []
+
+    def _position_overlay(self, label: tk.Label, item, column: str) -> None:
+        """Place (or hide, if scrolled out of view) an overlay label over a specific cell."""
+        bbox = self.tree.bbox(item, column)
+        if not bbox:
+            label.place_forget()
+            return
+        x, y, width, height = bbox
+        label.place(in_=self.tree, x=x, y=y, width=width, height=height)
+
+    def _reposition_invalid_overlays(self) -> None:
+        """Recompute overlay positions, e.g. after the table is scrolled."""
+        for overlay in self.invalid_overlays:
+            self._position_overlay(overlay['label'], overlay['item'], overlay['column'])
+
+    def _sync_overlay_text(self, item, column: str) -> None:
+        """Keep an invalid-cell overlay's text in sync with the underlying cell value."""
+        for overlay in self.invalid_overlays:
+            if overlay['item'] == item and overlay['column'] == column:
+                overlay['label'].config(text=self.tree.set(item, column))
+
+    def _find_cell_item(self, cell_info: dict):
+        """Locate the current tree item matching a cell's row_type/court_name/player_idx."""
+        for item in self.tree.get_children():
+            tags = self.tree.item(item, 'tags')
+            if not tags or tags[0] != cell_info['row_type'] or len(tags) < 3:
+                continue
+            if cell_info['row_type'] in ('team1', 'team2') and tags[1] != cell_info['court_name']:
+                continue
+            if tags[2] == str(cell_info['player_idx']):
+                return item
+        return None
+
+    def _mark_invalid_cell(self, cell_info: dict) -> None:
+        """Overlay a red label on top of a player cell that breaks table validation."""
+        item = self._find_cell_item(cell_info)
+        if item is None:
+            return
+        column = f"#{cell_info['col_index'] + 1}"
+        value = self.tree.set(item, column)
+
+        label = tk.Label(self.tree, text=value, background='#d9534f', foreground='white', anchor='w')
+        label.bind('<Button-1>', lambda e, it=item, col=column: self._handle_cell_selection(it, col))
+        self.invalid_overlays.append({'label': label, 'item': item, 'column': column})
+        self._position_overlay(label, item, column)
+
+    def _get_master_players(self) -> set:
+        """Return the set of player values expected to appear in every game (from the first game)."""
+        if not self.games_data:
+            return set()
+        players = []
+        for court, data in self.games_data[0].items():
+            if court == 'Game':
+                continue
+            if court == 'Bench':
+                players += data
+            else:
+                players += data.get('Team1', [])
+                players += data.get('Team2', [])
+        return set(p for p in players if p)
+
+    def refresh_invalid_cell_highlights(self) -> None:
+        """Mark, in red, any player cell that is duplicated or foreign within its game."""
+        self._clear_invalid_overlays()
+
+        if not self.games_data:
+            return
+
+        master_players = self._get_master_players()
+
+        for game_idx, game in enumerate(self.games_data):
+            entries = []  # (row_type, court_name, player_idx, value)
+            for court, data in game.items():
+                if court == 'Game':
+                    continue
+                if court == 'Bench':
+                    entries += [('bench_row', None, idx, value) for idx, value in enumerate(data) if value]
+                else:
+                    for team_num, team_key in ((1, 'Team1'), (2, 'Team2')):
+                        entries += [(f'team{team_num}', court, idx, value)
+                                    for idx, value in enumerate(data.get(team_key, [])) if value]
+
+            value_counts: dict = {}
+            for _, _, _, value in entries:
+                value_counts[value] = value_counts.get(value, 0) + 1
+
+            for row_type, court_name, player_idx, value in entries:
+                if value_counts[value] > 1 or value not in master_players:
+                    self._mark_invalid_cell({
+                        'game_idx': game_idx, 'row_type': row_type,
+                        'court_name': court_name, 'player_idx': player_idx,
+                        'col_index': game_idx + 2,
+                    })
+
     def swap_selected_players(self):
-        """Swap the player values of the 2 currently selected cells."""
+        """Swap the player values of the 2 currently selected cells.
+
+        The swap is always applied, even if it makes the table temporarily invalid
+        (e.g. duplicate players in a game); affected cells are then highlighted in red
+        via refresh_invalid_cell_highlights() so further swaps remain possible.
+        """
         if len(self.selected_cells) != 2:
             messagebox.showwarning("Warning", "Select exactly 2 player cells to swap.")
             return
@@ -549,23 +671,18 @@ class SheetEditorGUI:
         cell_a, cell_b = self.selected_cells
         self.clear_cell_selection()
 
-        try:
-            value_a = self.get_cell_player_value(cell_a)
-            value_b = self.get_cell_player_value(cell_b)
+        value_a = self.get_cell_player_value(cell_a)
+        value_b = self.get_cell_player_value(cell_b)
 
-            self.set_cell_player_value(cell_a, value_b)
-            self.set_cell_player_value(cell_b, value_a)
+        self.set_cell_player_value(cell_a, value_b)
+        self.set_cell_player_value(cell_b, value_a)
 
-            self.populate_table()
-            self.update_csv_from_games()
-            self.calculate_statistics()
+        self.populate_table()
+        self.update_csv_from_games()
+        self.calculate_statistics()
 
-            self.status_bar.config(text=f"Swapped players '{value_a}' and '{value_b}'")
-            _logger.debug("Swapped players '%s' and '%s'", value_a, value_b)
-
-        except Exception as e:
-            _logger.error("Failed to swap players: %s", str(e))
-            messagebox.showerror("Error", f"Failed to swap players: {str(e)}")
+        self.status_bar.config(text=f"Swapped players '{value_a}' and '{value_b}'")
+        _logger.debug("Swapped players '%s' and '%s'", value_a, value_b)
 
     def on_item_double_click(self, event):
         """Handle double-click on table item for editing."""
