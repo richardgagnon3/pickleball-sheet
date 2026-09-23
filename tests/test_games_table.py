@@ -42,4 +42,4 @@ class TestGamesTable:
         game_table_raw = self._load_games_csv(games_file)
         with pytest.raises(Exception) as exc_info:
             game_table = GamesTable(game_table_raw)
-        assert str(exc_info.value) == 'Something wrong in games table'
+        assert str(exc_info.value).startswith('Invalid games table:')
