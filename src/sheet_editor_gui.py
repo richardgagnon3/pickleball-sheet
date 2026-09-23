@@ -184,6 +184,18 @@ class SheetEditorGUI:
         overall_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.overall_stats_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+        # Errors tab, shown whenever the game data fails validation
+        self.errors_frame = ttk.Frame(self.stats_notebook)
+        self.stats_notebook.add(self.errors_frame, text="Errors")
+
+        self.errors_text = tk.Text(self.errors_frame, wrap=tk.WORD, foreground='#d9534f')
+        errors_scroll = ttk.Scrollbar(self.errors_frame, orient=tk.VERTICAL,
+                                     command=self.errors_text.yview)
+        self.errors_text.configure(yscrollcommand=errors_scroll.set)
+
+        errors_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.errors_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
     def open_file(self):
         """Open and load a CSV file."""
         file_path = filedialog.askopenfilename(
@@ -369,10 +381,18 @@ class SheetEditorGUI:
             # Update statistics display
             self.update_statistics_display()
 
+            # Data is valid: clear any previous error and surface the Overall Statistics tab
+            self.errors_text.delete('1.0', tk.END)
+            self.stats_notebook.select(self.overall_stats_frame)
+
         except Exception as e:
             # Invalid game data (e.g. a duplicate player introduced by a swap) is allowed to
-            # persist so the user can keep swapping; just log it instead of blocking with a dialog.
+            # persist so the user can keep swapping; surface it in the Errors tab instead of
+            # blocking with a dialog.
             _logger.warning("Skipped statistics update, invalid game data: %s", str(e))
+            self.errors_text.delete('1.0', tk.END)
+            self.errors_text.insert('1.0', str(e))
+            self.stats_notebook.select(self.errors_frame)
 
     def update_statistics(self):
         """Update statistics when called from button."""
