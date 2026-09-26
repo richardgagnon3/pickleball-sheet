@@ -66,7 +66,7 @@ class GameTableView(ttk.Frame):
         for i in range(num_games):
             game_name = games_data[i].get('Game', f'p{i+1}')
             self.tree.heading(f'Game_{i+1}', text=game_name)
-            self.tree.column(f'Game_{i+1}', width=80, minwidth=60)
+            self.tree.column(f'Game_{i+1}', width=80, minwidth=60, anchor=tk.CENTER)
 
         # Find all courts across all games
         all_courts = set()

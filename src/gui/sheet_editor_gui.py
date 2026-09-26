@@ -12,7 +12,6 @@ import os
 import logging
 
 from sheet_reader import SheetReader
-from games_table import GamesTable
 from game_data_io import read_csv_rows, write_csv_rows, games_to_csv_rows
 from game_table_view import GameTableView
 from statistics_panel import StatisticsPanel
@@ -151,14 +150,11 @@ class SheetEditorGUI:
         self.csv_data = read_csv_rows(file_path)
         self.original_data = [row[:] for row in self.csv_data]  # Deep copy
 
-        # Parse the games using SheetReader
+        # Parse the games using SheetReader. Validation is handled by the
+        # statistics panel so invalid data can still be displayed and edited.
         try:
             sheet_reader = SheetReader(file_path)
             self.games_data = sheet_reader.read()
-
-            # Validate before accepting the load
-            GamesTable(self.games_data)
-
         except Exception as e:
             _logger.error("Failed to parse game data: %s", str(e))
             messagebox.showerror("Parse Error", f"Failed to parse game data: {str(e)}")
