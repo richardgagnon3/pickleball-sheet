@@ -111,7 +111,7 @@ class GamesTable:
             return bench_list
         for i, game in enumerate(self._game_table):
             bench = game.get("Bench", None)
-            if player in bench:
+            if bench and player in bench:
                 bench_list[i] = game['Game']
         return bench_list
     

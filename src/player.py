@@ -43,22 +43,30 @@ class PlayerStatistics:
         benched_games.sort()
         self._nb_pauses = len(benched_games)
         self._nb_games = len(self._bench_seq) - self._nb_pauses
-        games_between_pauses = []
-        consecutive_played_games = 0
-        game_index = 0
-        for i in self._bench_seq:
-            if i == 0:
-                consecutive_played_games += 1
-                game_index += 1
-                continue
-            if game_index == 0:
-                game_index += 1
-                continue
-            games_between_pauses.append(consecutive_played_games)
+        if self._nb_pauses < 2:
+            # If there are less than 2 pauses, we consider all games played were between pauses.
+            games_between_pauses = [self._nb_games]
+        else:
+            games_between_pauses = []
+            # Count consecutive played games between 2 real pauses (ignore games before the first pause and after the last pause).
+            first_pause_found = False
             consecutive_played_games = 0
-            game_index += 1
-        if consecutive_played_games > 0:
-            games_between_pauses.append(consecutive_played_games)
+            game_index = 0
+            for i in self._bench_seq:
+                if i == 0:
+                    consecutive_played_games += 1
+                    game_index += 1
+                    continue
+                if not first_pause_found:
+                    game_index += 1
+                    consecutive_played_games = 0
+                    first_pause_found = True
+                    continue
+
+                games_between_pauses.append(consecutive_played_games)
+                consecutive_played_games = 0
+                game_index += 1
+
         self._between_pause_stats = BaseStatistics(games_between_pauses)
         self._logger.info("Between pause stats for player %s: %s", self._player.name, self._between_pause_stats)
 
