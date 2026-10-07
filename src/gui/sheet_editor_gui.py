@@ -6,6 +6,7 @@ It allows users to load CSV files, view player assignments in a table format,
 and modify player assignments for each game.
 """
 
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
@@ -365,16 +366,24 @@ def main():
     root = tk.Tk()
     app = SheetEditorGUI(root)
 
-    # Load default file if available
-    games_dir = os.path.join(_REPO_ROOT, "games")
-    if os.path.exists(games_dir):
-        csv_files = [f for f in os.listdir(games_dir) if f.endswith('.csv')]
-        if csv_files:
-            default_file = os.path.join(games_dir, csv_files[0])
-            try:
-                app.load_csv_file(default_file)
-            except Exception as e:
-                _logger.warning(f"Could not load default file {default_file}: {str(e)}")
+    # Load file if provided as command-line argument
+    if len(sys.argv) > 1:
+        file_path = sys.argv[1]
+        try:
+            app.load_csv_file(file_path)
+        except Exception as e:
+            _logger.error(f"Failed to load specified file {file_path}: {str(e)}")
+    else:
+        # Load default file if available
+        games_dir = os.path.join(_REPO_ROOT, "games")
+        if os.path.exists(games_dir):
+            csv_files = [f for f in os.listdir(games_dir) if f.endswith('.csv')]
+            if csv_files:
+                default_file = os.path.join(games_dir, csv_files[0])
+                try:
+                    app.load_csv_file(default_file)
+                except Exception as e:
+                    _logger.warning(f"Could not load default file {default_file}: {str(e)}")
 
     root.mainloop()
 
