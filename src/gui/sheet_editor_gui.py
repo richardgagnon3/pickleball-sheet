@@ -113,7 +113,11 @@ class SheetEditorGUI:
         self.status_bar = ttk.Label(self.root, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-        self.invalid_overlay = InvalidCellOverlay(self.tree, on_cell_click=self._handle_cell_selection)
+        self.invalid_overlay = InvalidCellOverlay(
+            self.tree,
+            on_cell_click=self._handle_cell_selection,
+            on_cell_double_click=self._handle_overlay_double_click,
+        )
         self.cell_selection = CellSelectionController(
             self.tree,
             games_data_provider=lambda: self.games_data,
@@ -200,6 +204,9 @@ class SheetEditorGUI:
     def _handle_cell_selection(self, item, column):
         return self.cell_selection.handle_cell_selection(item, column)
 
+    def _handle_overlay_double_click(self, item, column):
+        return self.on_item_double_click(None, item, column)
+
     def swap_selected_players(self):
         """Swap the player values of the 2 currently selected cells.
 
@@ -219,10 +226,11 @@ class SheetEditorGUI:
 
         self.status_bar.config(text=f"Swapped players '{value_a}' and '{value_b}'")
 
-    def on_item_double_click(self, event):
+    def on_item_double_click(self, event, item=None, column=None):
         """Handle double-click on table item for editing."""
-        item = self.tree.identify_row(event.y)
-        column = self.tree.identify_column(event.x)
+        if item is None or column is None:
+            item = self.tree.identify_row(event.y)
+            column = self.tree.identify_column(event.x)
 
         if not item or not column:
             return
@@ -249,12 +257,14 @@ class SheetEditorGUI:
             elif col_index <= 1:  # Don't edit Court column (index 0) or Team column for bench
                 return
 
-            current_value = self.tree.item(item)['values'][col_index] if col_index < len(self.tree.item(item)['values']) else ''
-
             # Determine game index from column (subtract 2 for Court and Team columns)
             game_idx = col_index - 2
             if game_idx >= len(self.games_data):
                 return
+
+            # Editing ends swap selection and restores the unmarked cell text.
+            self.cell_selection.clear_selection()
+            current_value = self.tree.item(item)['values'][col_index] if col_index < len(self.tree.item(item)['values']) else ''
 
             # Get court name if it's a team row
             court_name = None

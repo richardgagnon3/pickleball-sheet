@@ -11,14 +11,16 @@ _logger = logging.getLogger("__main__")
 class InvalidCellOverlay:
     """Manages small red Label widgets placed on top of invalid player cells."""
 
-    def __init__(self, tree, on_cell_click):
+    def __init__(self, tree, on_cell_click, on_cell_double_click):
         """
         tree: the ttk.Treeview showing player cells.
         on_cell_click: callable(item, column) forwarded when an overlay label is clicked,
             so invalid cells remain selectable/swappable.
+        on_cell_double_click: callable(item, column) forwarded when an overlay label is double-clicked.
         """
         self.tree = tree
         self._on_cell_click = on_cell_click
+        self._on_cell_double_click = on_cell_double_click
         self.overlays = []
 
     def clear(self) -> None:
@@ -75,5 +77,6 @@ class InvalidCellOverlay:
 
         label = tk.Label(self.tree, text=value, background='#d9534f', foreground='white', anchor='w')
         label.bind('<Button-1>', lambda e, it=item, col=column: self._on_cell_click(it, col))
+        label.bind('<Double-Button-1>', lambda e, it=item, col=column: self._on_cell_double_click(it, col))
         self.overlays.append({'label': label, 'item': item, 'column': column})
         self._position_overlay(label, item, column)
