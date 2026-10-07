@@ -41,7 +41,7 @@ class StatisticsPanel(ttk.Frame):
 
         for col in player_columns:
             self.player_stats_tree.heading(col, text=col)
-            self.player_stats_tree.column(col, width=100, minwidth=80)
+            self.player_stats_tree.column(col, width=100, minwidth=80, anchor=tk.CENTER)
 
         player_v_scroll = ttk.Scrollbar(self.player_stats_frame, orient=tk.VERTICAL,
                                        command=self.player_stats_tree.yview)
