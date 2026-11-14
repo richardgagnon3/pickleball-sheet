@@ -16,7 +16,7 @@
             },
             "justMyCode": true,
             "args": [
-                "games/06j-1t_so-so.csv",
+                "games/9players_2court-2026.csv",
                 "-l",
                 "debug",
                 "-s"
@@ -30,13 +30,14 @@
             "console": "integratedTerminal",
             "cwd": "${fileDirname}",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}${pathSeparator}${env:PYTHONPATH}"
+                "PYTHONPATH": "${workspaceFolder}${pathSeparator}src"
             },
             "justMyCode": true,
             "args": [
-                "${workspaceFolder}${pathSeparator}games/14j-3t.csv",
+                "${workspaceFolder}${pathSeparator}games/8players_2court-2026.csv",
                 "-l",
-                "10"
+                "debug",
+                "-s"
             ],
             "purpose": [
                 "debug-in-terminal"
