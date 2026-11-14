@@ -8,6 +8,7 @@ import pandas as pd
 
 from games_table import GamesTable
 from player import Player, PlayerStatistics
+from sheet_score import score_sheet
 
 _logger = logging.getLogger("__main__")
 
@@ -21,6 +22,7 @@ class StatisticsPanel(ttk.Frame):
         self.player_stats = {}
         self.overall_stats = None
         self.games_table = None
+        self.sheet_score = None
 
         self.stats_notebook = ttk.Notebook(self)
         self.stats_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -117,6 +119,8 @@ class StatisticsPanel(ttk.Frame):
             else:
                 self.overall_stats = pd.DataFrame(columns=overall_stats_columns)
 
+            self.sheet_score = score_sheet(games_data)
+
             self._update_display(current_file)
 
             self.errors_text.delete('1.0', tk.END)
@@ -157,6 +161,8 @@ class StatisticsPanel(ttk.Frame):
             inter_bench_avg_std = self.overall_stats['inter_bench_avg'].std() if 'inter_bench_avg' in self.overall_stats.columns else 0
 
             stats_text = f"Overall Statistics for {os.path.basename(current_file) if current_file else 'current file'}:\n\n"
+            if self.sheet_score is not None:
+                stats_text += self.sheet_score.report() + "\n\n"
             stats_text += f"Played games standard deviation: {played_games_std:.2f}\n"
             stats_text += f"  Difference between max and min played games: {max_games_diff}\n"
             stats_text += f"Inter-bench average standard deviation: {inter_bench_avg_std:.2f}\n"

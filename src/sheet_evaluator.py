@@ -5,6 +5,7 @@ import pandas as pd
 
 from games_table import GamesTable
 from player import Player, PlayerStatistics
+from sheet_score import score_sheet
 from sheet_reader import SheetReader
 
 LEVEL_ARGS = ["debug", "info", "warning", "error"]
@@ -130,6 +131,9 @@ try:
             overall_stats["inter_bench_min"] == overall_stats["inter_bench_min"].min()
         ]["player"].tolist()
         print(f"     Player with lowest inter-bench time: {quick_benched_players}")
+
+    print()
+    print(score_sheet(file_data).report())
 
 except Exception as e:
     _logger.error("Exception raised: %s", e)
