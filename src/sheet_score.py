@@ -2,24 +2,34 @@
 
 The score is a penalty: **lower is better, 0 is a perfect sheet**.
 
-Four criteria are measured, in priority order:
+Five criteria are measured, in priority order:
 
 1. games     - every player plays the same number of games.
-2. pauses    - the number of games played between two pauses is the same for everybody.
-3. partners  - players team with as many different partners as possible.
-4. opponents - players face as many different opponents as possible.
+2. pauses    - the number of games played between two pauses is about the same for
+               everybody: within +/- PAUSE_TOLERANCE of the ideal rotation is free,
+               so the bench can be varied (criterion 3).
+3. bench     - players sit on the bench with as many different players as possible.
+4. partners  - players team with as many different partners as possible.
+5. opponents - players face as many different opponents as possible.
 
-Each criterion is measured the same way: we count how far a distribution of
-integers (games per player, games between pauses, times each pair teamed up,
-times each pair faced each other) is from the most even distribution
+Criteria 1, 3, 4 and 5 are measured the same way: we count how far a distribution of
+integers (games per player, games between pauses, times each pair sat on the bench
+together, times each pair teamed up, times each pair faced each other) is from the most even distribution
 possible with the same total. ``_excess`` returns that distance, which roughly
 reads as "number of units that would have to move to make it perfectly
 even". Because of this, an unavoidable imbalance (e.g. 11 players sharing 40
 playing slots can't all play the same number of games) costs nothing, and only
 avoidable imbalance is penalized.
 
-The global score is the weighted sum of the four penalties. Weights decrease
-by a factor of 10 to reflect the priority order (see ``DEFAULT_WEIGHTS``).
+For criterion 2, the ideal number of games between two pauses is the one of a
+perfect rotation: with N players and B on the bench per game, each player
+rests every N/B games, i.e. plays N/B - 1 games between pauses (2.67 for 11
+players and 3 benched: 2 or 3 games). Each gap outside that ideal +/-
+PAUSE_TOLERANCE costs its distance to the accepted range, and each
+back-to-back pause (0 games between two pauses) costs 1 more.
+
+The global score is the weighted sum of the five penalties. Weights reflect
+the priority order (see ``DEFAULT_WEIGHTS``).
 
 Scores are meant to compare sheets for the same configuration (same
 players, courts and number of games).
@@ -28,14 +38,25 @@ players, courts and number of games).
 import argparse
 import itertools
 import logging
+import math
 import os
 from collections import Counter
 from dataclasses import dataclass, field
 
 _logger = logging.getLogger("__main__")
 
-CRITERIA = ("games", "pauses", "partners", "opponents")
-DEFAULT_WEIGHTS = {"games": 1000.0, "pauses": 100.0, "partners": 10.0, "opponents": 1.0}
+CRITERIA = ("games", "pauses", "bench", "partners", "opponents")
+DEFAULT_WEIGHTS = {
+    "games": 100000.0,
+    "pauses": 5000.0,
+    "bench": 100.0,
+    "partners": 10.0,
+    "opponents": 1.0,
+}
+# Games between pauses may differ from the ideal rotation by this much at no cost.
+PAUSE_TOLERANCE = 1
+RANKING_HEADER = (f"{'Rank':>4}  {'Score':>8}  {'Games':>6} {'Pauses':>6} {'Bench':>6} "
+                  f"{'Partn':>6} {'Oppon':>6}  File")
 
 
 def _excess(counts: list[int], total: int | None = None, nb_slots: int | None = None) -> float:
@@ -92,6 +113,7 @@ class SheetScore:
 
     games: float = 0.0
     pauses: float = 0.0
+    bench: float = 0.0
     partners: float = 0.0
     opponents: float = 0.0
     weights: dict = field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
@@ -99,6 +121,8 @@ class SheetScore:
     games_per_player: dict = field(default_factory=dict)
     gaps_per_player: dict = field(default_factory=dict)
     back_to_back_pauses: list = field(default_factory=list)
+    pause_range: tuple | None = None  # accepted (min, max) games between pauses
+    bench_counts: Counter = field(default_factory=Counter)
     partner_counts: Counter = field(default_factory=Counter)
     opponent_counts: Counter = field(default_factory=Counter)
     nb_players: int = 0
@@ -110,6 +134,11 @@ class SheetScore:
     def as_tuple(self) -> tuple:
         """Strict priority ordering key: compare criterion 1 first, then 2, etc."""
         return tuple(getattr(self, c) for c in CRITERIA)
+
+    def ranking_row(self, rank: int, name: str) -> str:
+        """One line of a ranking table, matching ``RANKING_HEADER``."""
+        values = " ".join(f"{getattr(self, c):6.1f}" for c in CRITERIA)
+        return f"{rank:>4}  {self.total:8.1f}  {values}  {name}"
 
     def _pair_summary(self, counts: Counter) -> str:
         nb_pairs = self.nb_players * (self.nb_players - 1) // 2
@@ -124,6 +153,7 @@ class SheetScore:
         labels = {
             "games": "Games per player",
             "pauses": "Games between pauses",
+            "bench": "Bench mate repeats",
             "partners": "Partner repeats",
             "opponents": "Opponent repeats",
         }
@@ -136,9 +166,13 @@ class SheetScore:
             lines.append(f"    games played: {min(g)} - {max(g)}")
         all_gaps = [x for gaps in self.gaps_per_player.values() for x in gaps]
         if all_gaps:
-            lines.append(f"    games between pauses: {min(all_gaps)} - {max(all_gaps)}")
+            accepted = (f" (accepted {self.pause_range[0]} - {self.pause_range[1]})"
+                        if self.pause_range else "")
+            lines.append(f"    games between pauses: {min(all_gaps)} - {max(all_gaps)}{accepted}")
         if self.back_to_back_pauses:
             lines.append(f"    back-to-back pauses: {', '.join(self.back_to_back_pauses)}")
+        if self.bench_counts:
+            lines.append(f"    bench:     {self._pair_summary(self.bench_counts)}")
         lines.append(f"    partners:  {self._pair_summary(self.partner_counts)}")
         lines.append(f"    opponents: {self._pair_summary(self.opponent_counts)}")
         return "\n".join(lines)
@@ -183,10 +217,23 @@ def score_sheet(games_data: list, weights: dict | None = None) -> SheetScore:
             score.back_to_back_pauses.append(p)
     score.gaps_per_player = gaps_per_player
     all_gaps = [x for gaps in gaps_per_player.values() for x in gaps]
-    # Back-to-back pauses cost one extra point each on top of the unevenness.
-    score.pauses = _excess(all_gaps) + all_gaps.count(0)
+    score.pauses = all_gaps.count(0)  # back-to-back pauses always cost 1
+    nb_benched = len(games_data[0].get("Bench", []))
+    if nb_benched:
+        ideal = nb_players / nb_benched - 1
+        low = max(0, math.floor(ideal) - PAUSE_TOLERANCE)
+        high = math.ceil(ideal) + PAUSE_TOLERANCE
+        score.pause_range = (low, high)
+        score.pauses += sum(max(low - x, 0, x - high) for x in all_gaps)
 
-    # 3 & 4. Partners and opponents
+    # 3. Players sitting on the bench together
+    for game in games_data:
+        for a, b in itertools.combinations(sorted(game.get("Bench", [])), 2):
+            score.bench_counts[_pair(a, b)] += 1
+    score.bench = _excess(list(score.bench_counts.values()),
+                          sum(score.bench_counts.values()), nb_pairs)
+
+    # 4 & 5. Partners and opponents
     for game in games_data:
         for team1, team2 in _iter_courts(game):
             for team in (team1, team2):
@@ -240,10 +287,9 @@ def main(argv: list | None = None) -> int:
     if not results:
         return 1
     results.sort(key=lambda r: (r[0].total, r[0].as_tuple()))
-    print(f"\n{'Rank':>4}  {'Score':>8}  {'Games':>6} {'Pauses':>6} {'Partn':>6} {'Oppon':>6}  File")
+    print(f"\n{RANKING_HEADER}")
     for rank, (score, csv_file) in enumerate(results, 1):
-        print(f"{rank:>4}  {score.total:8.1f}  {score.games:6.1f} {score.pauses:6.1f} "
-              f"{score.partners:6.1f} {score.opponents:6.1f}  {csv_file}")
+        print(score.ranking_row(rank, csv_file))
     return 0
 
 

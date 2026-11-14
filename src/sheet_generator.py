@@ -9,6 +9,8 @@ Each candidate sheet is built game by game:
 * **Pauses**: the players who paused the least so far are benched first;
   among them, those who played the longest since their last pause are
   preferred, with some random jitter so every candidate is different.
+  Players who already sat on the bench together are avoided, even if it
+  delays a pause by about one game (accepted by sheet_score.PAUSE_TOLERANCE).
 * **Teams**: several random ways of splitting the remaining players into
   courts/teams are tried, and the one creating the fewest repeated
   partners (then opponents) so far is kept.
@@ -27,7 +29,7 @@ from collections import Counter
 
 from game_data_io import games_to_csv_rows, write_csv_rows
 from games_table import GamesTable
-from sheet_score import score_sheet, SheetScore
+from sheet_score import RANKING_HEADER, score_sheet, SheetScore
 
 _logger = logging.getLogger("__main__")
 
@@ -41,12 +43,24 @@ def _pair(a: str, b: str) -> tuple:
     return (a, b) if a <= b else (b, a)
 
 
-def _choose_bench(players, nb_bench, rests, last_rest, game_idx, rng, jitter):
-    """Pick the players to bench for game ``game_idx``."""
-    def priority(p):
-        since_last = game_idx - last_rest[p]  # large = played for a long time
-        return (rests[p], -since_last + rng.uniform(0, jitter))
-    return sorted(players, key=priority)[:nb_bench]
+# Cost (in games of pause delay) of each previous bench sit-out with an already
+# chosen player. Each candidate uses one of these: below 1 it only breaks ties
+# in the pause rotation, above 1 it may delay a pause by a game to vary the bench.
+BENCH_MATE_COSTS = (0.4, 1.0, 1.5)
+
+
+def _choose_bench(players, nb_bench, rests, last_rest, game_idx, rng, jitter, bench_mates,
+                  bench_mate_cost):
+    """Pick the players to bench for game ``game_idx``, one at a time."""
+    noise = {p: rng.uniform(0, jitter) for p in players}
+    bench = []
+    for _ in range(nb_bench):
+        def priority(p):
+            since_last = game_idx - last_rest[p]  # large = played for a long time
+            repeats = sum(bench_mates[_pair(p, q)] for q in bench)
+            return (rests[p], -since_last + noise[p] + bench_mate_cost * repeats)
+        bench.append(min((p for p in players if p not in bench), key=priority))
+    return bench
 
 
 def _choose_courts(on_court, nb_courts, partners, opponents, rng, team_tries):
@@ -68,7 +82,8 @@ def _choose_courts(on_court, nb_courts, partners, opponents, rng, team_tries):
 
 
 def generate_sheet(nb_players: int, nb_courts: int, nb_games: int,
-                   rng: random.Random, jitter: float = 2.0, team_tries: int = 20) -> list:
+                   rng: random.Random, jitter: float = 2.0, team_tries: int = 20,
+                   bench_mate_cost: float = 1.0) -> list:
     """Generate one random valid sheet, as games_data (same format as SheetReader.read())."""
     if nb_players < nb_courts * PLAYERS_PER_COURT:
         raise ValueError(f"{nb_players} players is not enough for {nb_courts} court(s)")
@@ -76,14 +91,17 @@ def generate_sheet(nb_players: int, nb_courts: int, nb_games: int,
     nb_bench = nb_players - nb_courts * PLAYERS_PER_COURT
     rests = {p: 0 for p in players}
     last_rest = {p: -1 for p in players}
-    partners, opponents = Counter(), Counter()
+    partners, opponents, bench_mates = Counter(), Counter(), Counter()
 
     games_data = []
     for g in range(nb_games):
-        bench = _choose_bench(players, nb_bench, rests, last_rest, g, rng, jitter)
+        bench = _choose_bench(players, nb_bench, rests, last_rest, g, rng, jitter, bench_mates,
+                              bench_mate_cost)
         for p in bench:
             rests[p] += 1
             last_rest[p] = g
+        for a, b in itertools.combinations(bench, 2):
+            bench_mates[_pair(a, b)] += 1
         on_court = [p for p in players if p not in bench]
         courts = _choose_courts(on_court, nb_courts, partners, opponents, rng, team_tries)
 
@@ -112,7 +130,8 @@ def optimize(nb_players: int, nb_courts: int, nb_games: int, tries: int = 5000,
     seen = set()
     for _ in range(tries):
         games_data = generate_sheet(nb_players, nb_courts, nb_games, rng,
-                                    jitter=rng.choice(JITTERS))
+                                    jitter=rng.choice(JITTERS),
+                                    bench_mate_cost=rng.choice(BENCH_MATE_COSTS))
         key = str(games_data)
         if key in seen:
             continue
@@ -159,13 +178,12 @@ def main(argv: list | None = None) -> int:
     os.makedirs(args.output_dir, exist_ok=True)
     prefix = f"{args.players:02d}j-{args.courts}t-{args.games}g"
     print(f"Tried {args.tries} sheets in {elapsed:.1f}s, best {len(results)} saved in {args.output_dir}/")
-    print(f"\n{'Rank':>4}  {'Score':>8}  {'Games':>6} {'Pauses':>6} {'Partn':>6} {'Oppon':>6}  File")
+    print(f"\n{RANKING_HEADER}")
     for rank, (score, games_data) in enumerate(results, 1):
         GamesTable(games_data)  # sanity check: never write an invalid sheet
         path = os.path.join(args.output_dir, f"{prefix}-best-{rank:02d}.csv")
         write_csv_rows(path, games_to_csv_rows(games_data))
-        print(f"{rank:>4}  {score.total:8.1f}  {score.games:6.1f} {score.pauses:6.1f} "
-              f"{score.partners:6.1f} {score.opponents:6.1f}  {path}")
+        print(score.ranking_row(rank, path))
     if args.verbose and results:
         print(f"\nBest sheet:\n{results[0][0].report()}")
     return 0

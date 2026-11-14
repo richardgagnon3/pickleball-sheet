@@ -51,7 +51,7 @@ class TestScoreSheet:
         sheet[1] = game("2", [(("1", "3"), ("2", "4"))], bench=["5"])
         score = score_sheet(sheet)
         assert score.games == 1
-        assert score.total >= 1000
+        assert score.total >= 100000
 
     def test_back_to_back_pause_penalized(self):
         sheet = [
@@ -63,6 +63,32 @@ class TestScoreSheet:
         score = score_sheet(sheet)
         assert score.back_to_back_pauses == ["5", "6"]
         assert score.pauses >= 2
+
+    @staticmethod
+    def _six_players(benches):
+        """1-court sheet for 6 players with the given benches (teams don't matter)."""
+        sheet = []
+        for i, bench in enumerate(benches, 1):
+            on_court = [p for p in "123456" if p not in bench]
+            sheet.append(game(str(i), [(on_court[:2], on_court[2:])], bench=bench))
+        return sheet
+
+    def test_pause_irregularity_within_tolerance_is_free(self):
+        # 6 players, 2 benched: ideal is 2 games between pauses, 1 to 3 accepted.
+        sheet = self._six_players([["1", "2"], ["3", "4"], ["1", "5"], ["2", "6"],
+                                   ["3", "5"], ["4", "6"], ["1", "2"]])
+        score = score_sheet(sheet)
+        assert score.pause_range == (1, 3)
+        assert score.gaps_per_player["1"] == [1, 3]
+        assert score.pauses == 0
+
+    def test_pause_irregularity_beyond_tolerance_penalized(self):
+        # Player 5 plays 4 games between pauses (accepted max 3): costs 1.
+        sheet = self._six_players([["5", "6"], ["1", "2"], ["3", "4"], ["1", "6"],
+                                   ["2", "3"], ["4", "5"]])
+        score = score_sheet(sheet)
+        assert score.gaps_per_player["5"] == [4]
+        assert score.pauses == 1
 
     def test_repeated_partners_penalized(self):
         sheet = [
@@ -79,7 +105,30 @@ class TestScoreSheet:
         # One unit of a higher-priority criterion outweighs one of the next.
         score = score_sheet(self.PERFECT_5)
         w = score.weights
-        assert w["games"] > w["pauses"] > w["partners"] > w["opponents"]
+        assert w["games"] > w["pauses"] > w["bench"] > w["partners"] > w["opponents"]
+
+    def test_repeated_bench_mates_penalized(self):
+        # 6 players, 2 benched per game. Players 5 and 6 rest together twice
+        # while the 15 possible bench pairs could all be different.
+        sheet = [
+            game("1", [(("1", "2"), ("3", "4"))], bench=["5", "6"]),
+            game("2", [(("1", "5"), ("3", "6"))], bench=["2", "4"]),
+            game("3", [(("1", "2"), ("3", "4"))], bench=["5", "6"]),
+        ]
+        score = score_sheet(sheet)
+        assert score.bench_counts[("5", "6")] == 2
+        assert score.bench == 1
+
+    def test_different_bench_mates_not_penalized(self):
+        sheet = [
+            game("1", [(("1", "2"), ("3", "4"))], bench=["5", "6"]),
+            game("2", [(("1", "5"), ("2", "6"))], bench=["3", "4"]),
+            game("3", [(("3", "5"), ("4", "6"))], bench=["1", "2"]),
+        ]
+        assert score_sheet(sheet).bench == 0
+
+    def test_single_bench_player_has_no_bench_mates(self):
+        assert score_sheet(self.PERFECT_5).bench == 0
 
     def test_custom_weights(self):
         sheet = [
