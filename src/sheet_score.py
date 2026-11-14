@@ -50,8 +50,8 @@ DEFAULT_WEIGHTS = {
     "games": 100000.0,
     "pauses": 5000.0,
     "bench": 100.0,
-    "partners": 10.0,
-    "opponents": 1.0,
+    "partners": 50.0,
+    "opponents": 10.0,
 }
 # Games between pauses may differ from the ideal rotation by this much at no cost.
 PAUSE_TOLERANCE = 1
